@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
 const buildQueryString = (params = {}) => {
   const search = new URLSearchParams();
@@ -34,6 +35,8 @@ export const getResources = async (params = {}) => {
 export const getResourceById = (id) => fetchJson(`/resources/${id}`);
 
 export const searchResources = (params = {}) => fetchJson("/search", params);
+
+export const searchWebResources = (params = {}) => fetchJson("/search/web", params);
 
 export const getLearningPaths = async () => {
   const data = await fetchJson("/learning-paths");

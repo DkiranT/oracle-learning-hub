@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, Bookmark, BookmarkCheck, LinkIcon } from "lucide-react";
 import ResourceCard from "../components/ResourceCard";
-import { getResourceById } from "../api/client";
+import { API_BASE_URL, getResourceById } from "../api/client";
+
+const YOUTUBE_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 
 const getYoutubeIdFromLink = (link) => {
   if (!link) {
@@ -13,17 +15,41 @@ const getYoutubeIdFromLink = (link) => {
     const parsed = new URL(link);
 
     if (parsed.hostname.includes("youtu.be")) {
-      return parsed.pathname.replace("/", "");
+      const shortId = parsed.pathname.split("/").filter(Boolean)[0] || "";
+      return YOUTUBE_ID_PATTERN.test(shortId) ? shortId : "";
     }
 
     if (parsed.hostname.includes("youtube.com")) {
-      return parsed.searchParams.get("v") || "";
+      const watchId = parsed.searchParams.get("v") || "";
+      if (YOUTUBE_ID_PATTERN.test(watchId)) {
+        return watchId;
+      }
+
+      const pathMatch = parsed.pathname.match(
+        /^\/(?:shorts|embed|live)\/([a-zA-Z0-9_-]{11})/
+      );
+      return pathMatch?.[1] || "";
     }
   } catch {
     return "";
   }
 
   return "";
+};
+
+const resolveYoutubeWatchLink = (link, youtubeId) => {
+  const preferredId = YOUTUBE_ID_PATTERN.test(youtubeId || "") ? youtubeId : "";
+  const extractedId = getYoutubeIdFromLink(link);
+  const finalId = preferredId || extractedId;
+
+  return finalId ? `https://www.youtube.com/watch?v=${finalId}` : "";
+};
+
+const buildYoutubeResolverUrl = (videoUrl, title) => {
+  const params = new URLSearchParams();
+  params.set("videoUrl", videoUrl || "");
+  params.set("title", title || "Oracle tutorial");
+  return `${API_BASE_URL}/resolve/youtube?${params.toString()}`;
 };
 
 const ResourceDetailPage = ({ bookmarkState }) => {
@@ -97,14 +123,22 @@ const ResourceDetailPage = ({ bookmarkState }) => {
 
   const isYoutubeResource =
     resource.type === "videos" &&
-    (resource.source === "YouTube" || resource.link?.includes("youtube.com"));
-  const youtubeId = resource.youtubeId || getYoutubeIdFromLink(resource.link);
+    (resource.source === "YouTube" ||
+      resource.link?.includes("youtube.com") ||
+      resource.link?.includes("youtu.be"));
+  const watchVideoHref = resolveYoutubeWatchLink(resource.link, resource.youtubeId);
+  const youtubeId = watchVideoHref ? watchVideoHref.split("v=")[1] : "";
   const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
     `${resource.title} Oracle`
   )}`;
-  const primaryCtaHref = isYoutubeResource ? youtubeSearchUrl : resource.link;
+  const youtubeResolverUrl = buildYoutubeResolverUrl(resource.link, resource.title);
+  const primaryCtaHref = isYoutubeResource
+    ? youtubeResolverUrl || watchVideoHref || youtubeSearchUrl
+    : resource.link;
   const primaryCtaLabel = isYoutubeResource
-    ? "Find on YouTube"
+    ? watchVideoHref
+      ? "Watch on YouTube"
+      : "Find on YouTube"
     : "Open Original Content";
 
   return (
@@ -163,12 +197,12 @@ const ResourceDetailPage = ({ bookmarkState }) => {
           </a>
           {isYoutubeResource && (
             <a
-              href={resource.link}
+              href={youtubeSearchUrl}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Open Curated Video Link
+              Find Similar on YouTube
             </a>
           )}
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
@@ -184,7 +218,7 @@ const ResourceDetailPage = ({ bookmarkState }) => {
           </h2>
           <p className="mb-4 text-sm text-slate-600">
             Some YouTube videos block embedded playback. If preview does not work,
-            use "Find on YouTube" above.
+            use the YouTube links above.
           </p>
           {!showEmbed && (
             <button
