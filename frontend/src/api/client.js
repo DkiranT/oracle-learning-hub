@@ -1,5 +1,8 @@
+const PROD_FALLBACK_API_BASE_URL = "https://oracle-learning-hub.onrender.com";
+
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD ? PROD_FALLBACK_API_BASE_URL : "http://localhost:5000");
 
 const buildQueryString = (params = {}) => {
   const search = new URLSearchParams();
