@@ -3,6 +3,10 @@ const cors = require("cors");
 const cheerio = require("cheerio");
 const resources = require("./data/resources");
 const learningPaths = require("./data/learningPaths");
+const {
+  manualTopicCollections,
+  fusionApiPlaybooks
+} = require("./data/knowledgeHub");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -572,6 +576,192 @@ const calculateRelevanceScore = (result, searchText, profile) => {
   return score;
 };
 
+const getCollectionHaystack = (collection) => {
+  const keywordText = Array.isArray(collection.keywords)
+    ? collection.keywords.join(" ")
+    : "";
+  const resourceText = Array.isArray(collection.resources)
+    ? collection.resources
+        .map((resource) =>
+          [resource.title, resource.description, resource.category, ...(resource.tags || [])]
+            .filter(Boolean)
+            .join(" ")
+        )
+        .join(" ")
+    : "";
+
+  return normalize([collection.title, collection.summary, keywordText, resourceText].join(" "));
+};
+
+const scoreTopicCollectionMatch = (collection, searchText) => {
+  const normalizedQuery = normalize(searchText);
+  const tokens = splitSearchTokens(searchText);
+
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  const haystack = getCollectionHaystack(collection);
+  if (!haystack) {
+    return 0;
+  }
+
+  let score = 0;
+  if (haystack.includes(normalizedQuery)) {
+    score += 28;
+  }
+
+  const keywordHits = countTokenMatches(
+    Array.isArray(collection.keywords) ? collection.keywords.join(" ") : "",
+    tokens
+  );
+  const textCoverage = getTokenCoverage(haystack, tokens);
+
+  score += keywordHits * 9;
+  score += Math.round(textCoverage * 20);
+  return score;
+};
+
+const collectManualTopicResults = (searchText) => {
+  const normalizedQuery = normalize(searchText);
+  const tokens = splitSearchTokens(searchText);
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const collected = [];
+
+  manualTopicCollections.forEach((collection) => {
+    const collectionScore = scoreTopicCollectionMatch(collection, searchText);
+    if (collectionScore <= 0) {
+      return;
+    }
+
+    const resources = Array.isArray(collection.resources) ? collection.resources : [];
+    resources.forEach((resource, index) => {
+      const resourceText = normalize(
+        [
+          resource.title,
+          resource.description,
+          resource.category,
+          ...(Array.isArray(resource.tags) ? resource.tags : [])
+        ].join(" ")
+      );
+      const resourceCoverage = getTokenCoverage(resourceText, tokens);
+      const exactTitleMatch = normalize(resource.title).includes(normalizedQuery);
+
+      if (tokens.length >= 3 && resourceCoverage < 0.18 && !exactTitleMatch) {
+        return;
+      }
+
+      const resourceScore =
+        110 +
+        collectionScore +
+        Math.round(resourceCoverage * 18) +
+        (exactTitleMatch ? 20 : 0);
+
+      collected.push({
+        ...resource,
+        id: resource.id || `manual-${collection.id}-${index + 1}`,
+        isExternal: true,
+        pathSuggestions: [],
+        relevanceScore: resourceScore,
+        sourceCollectionId: collection.id,
+        sourceCollectionTitle: collection.title
+      });
+    });
+  });
+
+  return collected.sort(
+    (a, b) =>
+      (Number.isFinite(b.relevanceScore) ? b.relevanceScore : -1) -
+        (Number.isFinite(a.relevanceScore) ? a.relevanceScore : -1) ||
+      a.title.localeCompare(b.title)
+  );
+};
+
+const filterKnowledgeTopics = (query = {}) => {
+  const topicId = normalize(query.topic);
+  const type = normalize(query.type);
+  const phrase = normalize(query.q);
+  const tokens = splitSearchTokens(query.q);
+
+  const matchesTopic = (topic) => {
+    if (!topicId) {
+      return true;
+    }
+
+    return normalize(topic.id) === topicId;
+  };
+
+  const matchesPhrase = (topic) => {
+    if (!phrase) {
+      return true;
+    }
+
+    const haystack = getCollectionHaystack(topic);
+    return haystack.includes(phrase) || getTokenCoverage(haystack, tokens) >= 0.2;
+  };
+
+  const filteredTopics = manualTopicCollections
+    .filter((topic) => matchesTopic(topic) && matchesPhrase(topic))
+    .map((topic) => {
+      const scopedResources = (topic.resources || []).filter((resource) => {
+        if (!type) {
+          return true;
+        }
+        return normalize(resource.type) === type;
+      });
+
+      return {
+        ...topic,
+        resources: scopedResources
+      };
+    })
+    .filter((topic) => topic.resources.length > 0 || !type);
+
+  return filteredTopics;
+};
+
+const filterFusionApiPlaybooks = (query = {}) => {
+  const suite = normalize(query.suite);
+  const module = normalize(query.module);
+  const operation = normalize(query.operation);
+  const phrase = normalize(query.q);
+  const tokens = splitSearchTokens(query.q);
+
+  return fusionApiPlaybooks.filter((playbook) => {
+    if (suite && normalize(playbook.suite) !== suite) {
+      return false;
+    }
+
+    if (module && normalize(playbook.module) !== module) {
+      return false;
+    }
+
+    if (operation && normalize(playbook.operation) !== operation) {
+      return false;
+    }
+
+    if (!phrase) {
+      return true;
+    }
+
+    const haystack = normalize(
+      [
+        playbook.suite,
+        playbook.module,
+        playbook.operation,
+        playbook.description,
+        ...(Array.isArray(playbook.tags) ? playbook.tags : [])
+      ].join(" ")
+    );
+
+    return haystack.includes(phrase) || getTokenCoverage(haystack, tokens) >= 0.25;
+  });
+};
+
 const buildYoutubeSearchUrl = (title) => {
   const seed = (title || "").toString().trim();
   const query = seed ? `${seed} Oracle` : "Oracle tutorial";
@@ -978,10 +1168,23 @@ app.get("/search/web", async (req, res) => {
     });
   }
 
+  const manualResults = collectManualTopicResults(searchText);
   const { results: liveResults, failedSources } =
     await fetchLiveOracleWebResults(searchText);
+  const combinedResults = [...manualResults, ...liveResults];
+  const dedupedCombined = [];
+  const seenCombined = new Set();
 
-  if (liveResults.length === 0) {
+  combinedResults.forEach((item) => {
+    const key = normalize(item.link) || normalize(item.title);
+    if (!key || seenCombined.has(key)) {
+      return;
+    }
+    seenCombined.add(key);
+    dedupedCombined.push(item);
+  });
+
+  if (dedupedCombined.length === 0) {
     const fallbackDataset = querySearch(resources, searchText).map(withPathSuggestions);
     const fallbackFiltered = applyFilters(fallbackDataset, req.query);
     const fallbackSorted = sortDataset(fallbackFiltered, req.query.sort);
@@ -1003,9 +1206,22 @@ app.get("/search/web", async (req, res) => {
     });
   }
 
-  const filtered = applyFilters(liveResults, req.query);
+  const filtered = applyFilters(dedupedCombined, req.query);
   const sorted = sortDataset(filtered, req.query.sort);
   const paginated = paginateDataset(sorted, req.query, 12);
+  const providerLabel =
+    manualResults.length > 0 ? "manual-curated+duckduckgo" : "duckduckgo";
+  const messageParts = [];
+
+  if (manualResults.length > 0) {
+    messageParts.push(
+      "Showing curated Oracle topic references first for this query."
+    );
+  }
+
+  if (failedSources.length > 0) {
+    messageParts.push("Some live sources were unavailable; results were supplemented.");
+  }
 
   return res.json({
     query: searchText,
@@ -1014,7 +1230,8 @@ app.get("/search/web", async (req, res) => {
     limit: paginated.limit,
     totalPages: paginated.totalPages,
     sort: normalize(req.query.sort) || "relevance",
-    provider: "duckduckgo",
+    provider: providerLabel,
+    message: messageParts.join(" "),
     grouped: groupByType(paginated.items),
     results: paginated.items,
     failedSources
@@ -1032,6 +1249,99 @@ app.get("/resolve/youtube", async (req, res) => {
   } catch {
     return res.redirect(302, fallbackSearchUrl);
   }
+});
+
+app.get("/knowledge/topics", (req, res) => {
+  const topics = filterKnowledgeTopics(req.query);
+  const allResources = topics.flatMap((topic) =>
+    (topic.resources || []).map((resource) => ({
+      ...resource,
+      topicId: topic.id,
+      topicTitle: topic.title
+    }))
+  );
+  const grouped = groupByType(allResources);
+
+  res.json({
+    totalTopics: topics.length,
+    totalResources: allResources.length,
+    topics,
+    grouped,
+    resources: allResources
+  });
+});
+
+app.get("/knowledge/apis", (req, res) => {
+  const playbooks = filterFusionApiPlaybooks(req.query);
+  const suites = [...new Set(fusionApiPlaybooks.map((item) => item.suite))];
+  const modules = [...new Set(fusionApiPlaybooks.map((item) => item.module))];
+  const operations = [...new Set(fusionApiPlaybooks.map((item) => item.operation))];
+  const suiteModules = fusionApiPlaybooks.reduce((acc, item) => {
+    if (!acc[item.suite]) {
+      acc[item.suite] = new Set();
+    }
+    acc[item.suite].add(item.module);
+    return acc;
+  }, {});
+
+  const sortedSuiteModules = Object.fromEntries(
+    Object.entries(suiteModules)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([suite, moduleSet]) => [suite, [...moduleSet].sort()])
+  );
+
+  res.json({
+    total: playbooks.length,
+    playbooks,
+    facets: {
+      suites: suites.sort(),
+      modules: modules.sort(),
+      operations: operations.sort(),
+      suiteModules: sortedSuiteModules
+    }
+  });
+});
+
+app.get("/resolve/topic", (req, res) => {
+  const query = (req.query.q || "").toString().trim();
+  const type = (req.query.type || "").toString().trim();
+
+  if (!query) {
+    return res.status(400).json({
+      message: "Missing required query parameter 'q'."
+    });
+  }
+
+  const topics = filterKnowledgeTopics({
+    q: query,
+    type
+  });
+  const resources = topics.flatMap((topic) => topic.resources || []);
+
+  if (resources.length === 0) {
+    return res.status(404).json({
+      message: `No manual topic URL found for '${query}'.`
+    });
+  }
+
+  const tokens = splitSearchTokens(query);
+  const normalizedQuery = normalize(query);
+  const ranked = [...resources].sort((a, b) => {
+    const score = (item) => {
+      const text = normalize(
+        [item.title, item.description, item.category, ...(item.tags || [])].join(" ")
+      );
+      let value = Math.round(getTokenCoverage(text, tokens) * 20);
+      if (normalize(item.title).includes(normalizedQuery)) {
+        value += 15;
+      }
+      return value;
+    };
+
+    return score(b) - score(a) || a.title.localeCompare(b.title);
+  });
+
+  return res.redirect(302, ranked[0].link);
 });
 
 app.get("/learning-paths", (_, res) => {

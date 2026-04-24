@@ -12,13 +12,17 @@ import {
 
 const categories = [
   "OCI",
+  "OIC",
   "Autonomous DB",
+  "REST Adapter",
+  "Agentic AI",
   "DevOps",
   "Streaming",
   "Kubernetes",
   "Security",
   "AI/ML",
-  "Integration"
+  "Integration",
+  "Oracle Blogs"
 ];
 
 const LAST_CATEGORY_KEY = "oracle-learning-hub-last-category";
@@ -104,12 +108,12 @@ const HomePage = ({ bookmarkState }) => {
   }, []);
 
   const handleSearch = (query) => {
-    navigate(`/search?q=${encodeURIComponent(query)}`);
+    navigate(`/search?q=${encodeURIComponent(query)}&scope=web`);
   };
 
   const handleCategorySelect = (category) => {
     localStorage.setItem(LAST_CATEGORY_KEY, category);
-    navigate(`/search?q=${encodeURIComponent(category)}`);
+    navigate(`/search?q=${encodeURIComponent(category)}&scope=web`);
   };
 
   const renderResourceGrid = (items, loadingLabel) => {
@@ -162,6 +166,15 @@ const HomePage = ({ bookmarkState }) => {
           placeholder="What do you want to learn?"
           buttonLabel="Discover"
         />
+
+        <div className="mt-4">
+          <button
+            onClick={() => navigate("/knowledge-hub")}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+          >
+            Open Knowledge Hub (Topic + API Payload Explorer)
+          </button>
+        </div>
 
         <div className="mt-6 flex flex-wrap gap-2">
           {categories.map((category) => (

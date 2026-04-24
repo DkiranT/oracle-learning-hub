@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BookOpen, FlaskConical, PlayCircle } from "lucide-react";
+import {
+  BookOpen,
+  FlaskConical,
+  Globe,
+  Library,
+  Newspaper,
+  PlayCircle
+} from "lucide-react";
 import SearchBar from "../components/SearchBar";
 import FilterBar from "../components/FilterBar";
 import ResourceCard from "../components/ResourceCard";
-import { searchResources } from "../api/client";
+import { searchResources, searchWebResources } from "../api/client";
 
 const sectionMeta = {
   docs: {
@@ -15,10 +22,21 @@ const sectionMeta = {
     title: "Videos",
     icon: PlayCircle
   },
+  blogs: {
+    title: "Blogs",
+    icon: Newspaper
+  },
   labs: {
     title: "Labs",
     icon: FlaskConical
   }
+};
+
+const emptyGrouped = {
+  docs: [],
+  videos: [],
+  blogs: [],
+  labs: []
 };
 
 const SearchResultsPage = ({ bookmarkState }) => {
@@ -26,26 +44,27 @@ const SearchResultsPage = ({ bookmarkState }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [grouped, setGrouped] = useState({
-    docs: [],
-    videos: [],
-    labs: []
-  });
+  const [grouped, setGrouped] = useState(emptyGrouped);
   const [meta, setMeta] = useState({
     total: 0,
     page: 1,
     limit: 9,
-    totalPages: 1
+    totalPages: 1,
+    provider: "curated",
+    message: "",
+    failedSources: []
   });
 
   const query = searchParams.get("q") || "";
   const level = searchParams.get("level") || "all";
   const type = searchParams.get("type") || "all";
   const sort = searchParams.get("sort") || "relevance";
+  const scope = searchParams.get("scope") || "web";
   const page = Number.parseInt(searchParams.get("page") || "1", 10) || 1;
   const limit = Number.parseInt(searchParams.get("limit") || "9", 10) || 9;
   const safePage = page > 0 ? page : 1;
   const safeLimit = limit > 0 ? limit : 9;
+  const isWebScope = scope === "web";
 
   useEffect(() => {
     let active = true;
@@ -70,7 +89,10 @@ const SearchResultsPage = ({ bookmarkState }) => {
           payload.type = type;
         }
 
-        const response = await searchResources(payload);
+        const response =
+          scope === "web"
+            ? await searchWebResources(payload)
+            : await searchResources(payload);
 
         if (!active) {
           return;
@@ -80,16 +102,18 @@ const SearchResultsPage = ({ bookmarkState }) => {
           total: response.total || 0,
           page: response.page || 1,
           limit: response.limit || safeLimit,
-          totalPages: response.totalPages || 1
+          totalPages: response.totalPages || 1,
+          provider: response.provider || (scope === "web" ? "duckduckgo" : "curated"),
+          message: response.message || "",
+          failedSources: Array.isArray(response.failedSources)
+            ? response.failedSources
+            : []
         });
 
-        setGrouped(
-          response.grouped || {
-            docs: [],
-            videos: [],
-            labs: []
-          }
-        );
+        setGrouped({
+          ...emptyGrouped,
+          ...(response.grouped || {})
+        });
       } catch {
         if (active) {
           setError("Search failed. Please check backend server and try again.");
@@ -106,7 +130,7 @@ const SearchResultsPage = ({ bookmarkState }) => {
     return () => {
       active = false;
     };
-  }, [query, level, type, sort, safePage, safeLimit]);
+  }, [query, level, type, sort, scope, safePage, safeLimit]);
 
   const totalCount = useMemo(() => meta.total || 0, [meta.total]);
 
@@ -119,6 +143,7 @@ const SearchResultsPage = ({ bookmarkState }) => {
         !value ||
         value === "all" ||
         (key === "sort" && value === "relevance") ||
+        (key === "scope" && value === "web") ||
         (key === "page" && Number(value) <= 1) ||
         (key === "limit" && Number(value) === 9)
       ) {
@@ -142,13 +167,39 @@ const SearchResultsPage = ({ bookmarkState }) => {
           Search Oracle resources
         </h1>
         <p className="mb-5 text-sm text-slate-600 md:text-base">
-          Explore curated docs, videos, and labs with smart filters.
+          Search Oracle docs, blogs, videos, and labs across curated and live web
+          sources.
         </p>
         <SearchBar
           initialValue={query}
-          placeholder="What do you want to learn?"
+          placeholder="Search OCI, OIC, REST adapter, Agentic AI, Oracle blogs..."
           onSearch={(value) => updateParams({ q: value }, { resetPage: true })}
         />
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => updateParams({ scope: "web" }, { resetPage: true })}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              isWebScope
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            <Globe size={15} />
+            Web Search (Oracle Ecosystem)
+          </button>
+          <button
+            onClick={() => updateParams({ scope: "curated" }, { resetPage: true })}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              !isWebScope
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            <Library size={15} />
+            Curated Library
+          </button>
+        </div>
       </section>
 
       <FilterBar
@@ -166,12 +217,27 @@ const SearchResultsPage = ({ bookmarkState }) => {
         </div>
       )}
 
+      {meta.message && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-700">
+          {meta.message}
+        </div>
+      )}
+
+      {!loading && meta.failedSources.length > 0 && isWebScope && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-soft">
+          Some live sources were unavailable in this request:{" "}
+          <span className="font-semibold">{meta.failedSources.join(", ")}</span>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-soft">
         {loading
-          ? "Searching curated Oracle resources..."
+          ? "Searching Oracle resources..."
           : `${totalCount} result${totalCount === 1 ? "" : "s"} found ${
               query ? `for "${query}"` : ""
-            } | Page ${meta.page} of ${meta.totalPages}`}
+            } | Page ${meta.page} of ${meta.totalPages} | Mode: ${
+              isWebScope ? "Web Search" : "Curated Library"
+            }`}
       </div>
 
       {!loading && totalCount === 0 && (
@@ -180,7 +246,8 @@ const SearchResultsPage = ({ bookmarkState }) => {
             No results yet
           </h2>
           <p className="text-slate-600">
-            Try a broader keyword like OCI, DevOps, Streaming, or Autonomous DB.
+            Try broader keywords like OIC, REST adapter, Agentic AI, Oracle
+            blogs, OCI DevOps, or Kubernetes.
           </p>
         </div>
       )}

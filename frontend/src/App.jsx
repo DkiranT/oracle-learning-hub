@@ -4,6 +4,7 @@ import HomePage from "./pages/HomePage";
 import SearchResultsPage from "./pages/SearchResultsPage";
 import ResourceDetailPage from "./pages/ResourceDetailPage";
 import LearningPathsPage from "./pages/LearningPathsPage";
+import KnowledgeHubPage from "./pages/KnowledgeHubPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import useBookmarks from "./hooks/useBookmarks";
 
@@ -26,6 +27,10 @@ const App = () => {
           element={<ResourceDetailPage bookmarkState={bookmarkState} />}
         />
         <Route path="/learning-paths" element={<LearningPathsPage />} />
+        <Route
+          path="/knowledge-hub"
+          element={<KnowledgeHubPage bookmarkState={bookmarkState} />}
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

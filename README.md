@@ -17,7 +17,8 @@ A full-stack web application to discover curated Oracle learning resources acros
   - Sections for Trending Topics, Beginner Paths, Hands-on Labs
   - Bonus section: Recommended for you
 - Search Results:
-  - Grouped content sections: Docs, Videos, Labs
+  - Scope toggle: Web Search (Oracle ecosystem) vs Curated Library
+  - Grouped content sections: Docs, Videos, Blogs, Labs
   - Filters by level and content type
   - Sort options (relevance, title, difficulty, source)
   - Pagination controls
@@ -30,6 +31,10 @@ A full-stack web application to discover curated Oracle learning resources acros
     - OCI Beginner to Architect
     - Streaming Deep Dive
   - Structured step-by-step progression
+- Knowledge Hub:
+  - Backend-curated topic bundles for OIC Gen3, REST Adapter, Agentic AI, and Fusion REST
+  - Dropdown-based Fusion API payload explorer (suite/module/operation)
+  - Ready sample request/response payloads for ERP, Procurement, HCM, and CX APIs
 - Bookmarking:
   - Save/unsave resources using browser local storage
 
@@ -44,6 +49,7 @@ Oracle-Learning-Hub/
       data/
         resources.js
         learningPaths.js
+        knowledgeHub.js
   frontend/
     package.json
     index.html
@@ -58,6 +64,7 @@ Oracle-Learning-Hub/
       hooks/useBookmarks.js
       components/
       pages/
+        KnowledgeHubPage.jsx
   README.md
 ```
 
@@ -100,21 +107,38 @@ VITE_API_BASE_URL=http://localhost:5000
 - `GET /resources`
 - `GET /resources/:id`
 - `GET /search?q=keyword`
+- `GET /search/web?q=keyword`
 - `GET /learning-paths`
 - `GET /recommendations`
+- `GET /knowledge/topics`
+- `GET /knowledge/apis`
+- `GET /resolve/topic?q=`
 - `POST /ai/recommend` (OpenAI-backed with fallback recommendations)
 
 ### Query Parameters
 
 `GET /resources` and `GET /search` support:
 
-- `type=docs|videos|labs`
+- `type=docs|videos|blogs|labs`
 - `level=Beginner|Intermediate|Advanced`
 - `sort=relevance|title_asc|title_desc|difficulty_asc|difficulty_desc|source_asc|source_desc`
 - `page=1`
 - `limit=9`
 - `category=OCI` (supported by `/resources`)
 - `featured=trending|beginner|labs` (supported by `/resources`)
+
+`GET /search/web` additionally searches across live Oracle ecosystem sources:
+
+- `docs.oracle.com`
+- `blogs.oracle.com`
+- `youtube.com`
+- `github.com/oracle`
+
+Knowledge endpoints:
+
+- `GET /knowledge/topics?q=&type=docs|videos|blogs|labs`
+- `GET /knowledge/apis?suite=ERP&module=AP&operation=Create%20AP%20Invoice&q=payload`
+- `GET /resolve/topic?q=oic+gen3&type=docs` (backend-curated URL redirect)
 
 ## OpenAI Recommendation Setup (Optional)
 
@@ -123,6 +147,8 @@ VITE_API_BASE_URL=http://localhost:5000
 3. Optionally set:
    - `OPENAI_MODEL` (default: `gpt-4.1-mini`)
    - `OPENAI_BASE_URL` (default: `https://api.openai.com/v1`)
+   - `WEB_SEARCH_ENGINE_URL` (default: `https://duckduckgo.com/html/`)
+   - `WEB_SEARCH_PER_SOURCE` (default: `5`)
 
 Example API call:
 
@@ -140,6 +166,17 @@ Mock data is stored in:
 
 - `backend/src/data/resources.js` (26 realistic Oracle resources)
 - `backend/src/data/learningPaths.js` (3 predefined guided paths)
+- `backend/src/data/knowledgeHub.js` (manual topic resources + Fusion API payload playbooks)
+
+## Manual URL Curation (Backend-Controlled)
+
+To add your own topic-specific links without changing frontend code:
+
+1. Edit `backend/src/data/knowledgeHub.js`
+2. Add/update entries under:
+   - `manualTopicCollections` for topic docs/videos/blogs/labs
+   - `fusionApiPlaybooks` for API endpoints and payload samples
+3. Restart backend (`npm run dev`)
 
 ## Future Enhancements
 

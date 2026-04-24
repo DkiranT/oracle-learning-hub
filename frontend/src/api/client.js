@@ -47,3 +47,9 @@ export const getRecommendations = async (params = {}) => {
   const data = await fetchJson("/recommendations", params);
   return data.recommendations || [];
 };
+
+export const getKnowledgeTopics = (params = {}) =>
+  fetchJson("/knowledge/topics", params);
+
+export const getFusionApiPlaybooks = (params = {}) =>
+  fetchJson("/knowledge/apis", params);

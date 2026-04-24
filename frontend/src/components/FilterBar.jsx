@@ -32,6 +32,7 @@ const FilterBar = ({
           <option value="all">All types</option>
           <option value="docs">Docs</option>
           <option value="videos">Videos</option>
+          <option value="blogs">Blogs</option>
           <option value="labs">Labs</option>
         </select>
       </label>
