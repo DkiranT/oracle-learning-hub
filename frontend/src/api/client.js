@@ -75,3 +75,12 @@ export const getFusionApiPlaybooks = (params = {}) =>
 
 export const summarizeResourceById = (id, payload = {}) =>
   postJson(`/resources/${id}/summary`, payload);
+
+export const buildResourceResolverUrl = (resource = {}) => {
+  const params = new URLSearchParams();
+  params.set("url", resource.link || "");
+  params.set("title", resource.title || "Oracle learning resource");
+  params.set("type", resource.type || "");
+  params.set("source", resource.source || "");
+  return `${API_BASE_URL}/resolve/resource?${params.toString()}`;
+};

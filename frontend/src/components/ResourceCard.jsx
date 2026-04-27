@@ -8,7 +8,7 @@ import {
   Newspaper,
   PlayCircle
 } from "lucide-react";
-import { API_BASE_URL } from "../api/client";
+import { buildResourceResolverUrl } from "../api/client";
 
 const difficultyStyles = {
   Beginner: "bg-emerald-50 text-emerald-700",
@@ -88,13 +88,6 @@ const getExternalActionLabel = (resourceType, hasPlayableVideo) => {
   return "Open Result";
 };
 
-const buildYoutubeResolverUrl = (videoUrl, title) => {
-  const params = new URLSearchParams();
-  params.set("videoUrl", videoUrl || "");
-  params.set("title", title || "Oracle tutorial");
-  return `${API_BASE_URL}/resolve/youtube?${params.toString()}`;
-};
-
 const ResourceCard = ({ resource, isBookmarked, onToggleBookmark }) => {
   const Icon = typeIcon[resource.type] || BookOpen;
   const isInternalResource =
@@ -107,15 +100,13 @@ const ResourceCard = ({ resource, isBookmarked, onToggleBookmark }) => {
   const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
     `${resource.title} Oracle`
   )}`;
-  const youtubeResolverUrl = buildYoutubeResolverUrl(resource.link, resource.title);
+  const resolverHref = buildResourceResolverUrl(resource);
   const watchVideoHref = isYoutubeResource
     ? resolveYoutubeWatchLink(resource.link, resource.youtubeId)
     : "";
-  const openResultHref = isYoutubeResource
-    ? youtubeResolverUrl || watchVideoHref || youtubeSearchUrl
-    : resource.link;
+  const openResultHref = resolverHref || watchVideoHref || youtubeSearchUrl;
   const openResultLabel = getExternalActionLabel(resource.type, Boolean(watchVideoHref));
-  const internalSecondaryHref = isYoutubeResource ? openResultHref : resource.link;
+  const internalSecondaryHref = resolverHref || resource.link;
   const internalSecondaryLabel = isYoutubeResource
     ? watchVideoHref
       ? "Watch on YouTube"

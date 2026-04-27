@@ -189,6 +189,210 @@ const fusionApiPlaybooks = [
     ]
   },
   {
+    id: "api-erp-ap-payments-create",
+    suite: "ERP",
+    module: "AP Payments",
+    operation: "Create AP Payment",
+    method: "POST",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/payments",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-payments.html",
+    description: "Create supplier payment transactions in Payables.",
+    difficulty: "Advanced",
+    tags: ["ERP", "AP", "Payments"],
+    requiredHeaders: headerPresets.authJsonFramework,
+    sampleRequest: {
+      BusinessUnit: "Vision Operations",
+      Supplier: "ABC SUPPLIER",
+      PaymentNumber: "PAY-2026-1011",
+      PaymentAmount: 1250.75
+    },
+    sampleResponse: {
+      PaymentId: 300100777001236,
+      PaymentNumber: "PAY-2026-1011",
+      PaymentStatus: "Issued"
+    },
+    tips: [
+      "Validate payment process profile and bank setup first.",
+      "Keep upstream invoice references for reconciliation."
+    ]
+  },
+  {
+    id: "api-erp-ar-transactions-get",
+    suite: "ERP",
+    module: "AR Transactions",
+    operation: "Get Receivables Transactions",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/receivablesTransactions",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-receivables-transactions.html",
+    description: "Read AR transaction headers for billing and collections integrations.",
+    difficulty: "Intermediate",
+    tags: ["ERP", "AR", "Transactions"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=TransactionNumber=INV-100892&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ TransactionNumber: "INV-100892", TransactionAmount: 4200, TransactionStatus: "Complete" }]
+    },
+    tips: [
+      "Use transaction number and date filters for targeted sync.",
+      "Fetch child lines only when finance detail is required."
+    ]
+  },
+  {
+    id: "api-erp-customers-get",
+    suite: "ERP",
+    module: "Customers",
+    operation: "Get Customers",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/customers",
+    docLink: "https://docs.oracle.com/en/cloud/saas/sales/faaps/api-customers.html",
+    description: "Retrieve customer master records used in Receivables flows.",
+    difficulty: "Beginner",
+    tags: ["ERP", "Customers", "Master Data"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=OrganizationName=Northwind%20Manufacturing&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ OrganizationName: "Northwind Manufacturing", CustomerNumber: "1006", Status: "Active" }]
+    },
+    tips: [
+      "Treat customer sync as foundational master-data integration.",
+      "Use stable customer IDs in downstream AR transactions."
+    ]
+  },
+  {
+    id: "api-erp-gl-journals-create",
+    suite: "ERP",
+    module: "GL",
+    operation: "Create Journal",
+    method: "POST",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/journals",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-journals.html",
+    description: "Create GL journals for accounting event integrations.",
+    difficulty: "Advanced",
+    tags: ["ERP", "GL", "Journals"],
+    requiredHeaders: headerPresets.authJsonFramework,
+    sampleRequest: {
+      LedgerName: "Vision Operations",
+      JournalName: "INTF-APR-ADJ-11",
+      AccountingDate: "2026-04-27",
+      JournalLines: [{ LineNumber: 1, AccountCombination: "01-000-2210-0000", EnteredDrAmount: 500 }]
+    },
+    sampleResponse: {
+      JournalId: 300100700220981,
+      JournalName: "INTF-APR-ADJ-11",
+      Status: "Unposted"
+    },
+    tips: [
+      "Validate account combinations and period status before post.",
+      "Use source/batch identifiers for audit traceability."
+    ]
+  },
+  {
+    id: "api-erp-gl-period-statuses-get",
+    suite: "ERP",
+    module: "GL Periods",
+    operation: "Get Period Statuses",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/accountingPeriods",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-accounting-periods.html",
+    description: "Read accounting period statuses to control posting windows.",
+    difficulty: "Intermediate",
+    tags: ["ERP", "GL", "Periods"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=LedgerName=Vision%20Operations;PeriodName=APR-26&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ PeriodName: "APR-26", ClosingStatus: "Open", LedgerName: "Vision Operations" }]
+    },
+    tips: [
+      "Check period status before creating journals.",
+      "Use this API as a gate in posting orchestration flows."
+    ]
+  },
+  {
+    id: "api-erp-fixed-assets-create",
+    suite: "ERP",
+    module: "Fixed Assets",
+    operation: "Create Asset",
+    method: "POST",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/assets",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25c/farfa/api-assets.html",
+    description: "Create asset records for capitalization integrations.",
+    difficulty: "Advanced",
+    tags: ["ERP", "Fixed Assets", "Capitalization"],
+    requiredHeaders: headerPresets.authJson,
+    sampleRequest: {
+      AssetNumber: "FA-2026-00091",
+      Book: "CORP",
+      AssetType: "CAPITALIZED",
+      Description: "Cloud Security Appliance"
+    },
+    sampleResponse: {
+      AssetId: 300100881001228,
+      AssetNumber: "FA-2026-00091",
+      Status: "Active"
+    },
+    tips: [
+      "Depreciation book and category mappings must be valid.",
+      "Capture source references for audit and rollback flows."
+    ]
+  },
+  {
+    id: "api-erp-cash-management-bank-accounts-get",
+    suite: "ERP",
+    module: "Cash Management",
+    operation: "Get Bank Accounts",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/bankAccounts",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-bank-accounts.html",
+    description: "Retrieve bank account setup for payment and reconciliation interfaces.",
+    difficulty: "Intermediate",
+    tags: ["ERP", "Cash Management", "Bank Accounts"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=BankAccountName=Vision%20Operating%20Account&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ BankAccountName: "Vision Operating Account", CurrencyCode: "USD", AccountType: "PAYMENT" }]
+    },
+    tips: [
+      "Secure account data and mask sensitive values in logs.",
+      "Use account IDs for downstream payment orchestration."
+    ]
+  },
+  {
+    id: "api-erp-tax-regimes-get",
+    suite: "ERP",
+    module: "Tax",
+    operation: "Get Tax Regimes",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/taxRegimes",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-tax-regimes.html",
+    description: "Read tax regime configurations for global tax compliance mappings.",
+    difficulty: "Intermediate",
+    tags: ["ERP", "Tax", "Regimes"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=TaxRegimeCode=US_VAT&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ TaxRegimeCode: "US_VAT", TaxRegimeName: "US VAT Regime", EffectiveFrom: "2024-01-01" }]
+    },
+    tips: [
+      "Sync regimes before tax rate/transaction integrations.",
+      "Map tax codes centrally to avoid duplicate logic."
+    ]
+  },
+  {
     id: "api-procurement-purchase-orders-create",
     suite: "Procurement",
     module: "Purchase Orders",
@@ -466,6 +670,260 @@ const fusionApiPlaybooks = [
     tips: [
       "Validate absence type against employee plan.",
       "Plan for approval-state polling or events."
+    ]
+  },
+  {
+    id: "api-hcm-assignments-get",
+    suite: "HCM",
+    module: "Assignments",
+    operation: "Get Assignments",
+    method: "GET",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/assignments",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-assignments.html",
+    description: "Retrieve worker assignments for workforce and org-sync integrations.",
+    difficulty: "Intermediate",
+    tags: ["HCM", "Assignments", "Work Relationship"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=PersonNumber=E10427;AssignmentStatusType=ACTIVE&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ AssignmentNumber: "E10427-1", BusinessUnitName: "Vision Operations", AssignmentStatusType: "ACTIVE" }]
+    },
+    tips: [
+      "Pull only active assignments unless historical data is needed.",
+      "Use assignment IDs for downstream payroll joins."
+    ]
+  },
+  {
+    id: "api-hcm-benefits-enrollments-get",
+    suite: "HCM",
+    module: "Benefits",
+    operation: "Get Benefit Enrollments",
+    method: "GET",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/benefitsEnrollments",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-benefits-enrollments.html",
+    description: "Read employee benefit enrollments for insurance and policy integrations.",
+    difficulty: "Intermediate",
+    tags: ["HCM", "Benefits", "Enrollments"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=PersonNumber=E10427;PlanName=Medical&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ PersonNumber: "E10427", PlanName: "Medical PPO", CoverageLevel: "Employee + Family" }]
+    },
+    tips: [
+      "Align plan names with tenant-specific benefit setup.",
+      "Use effective dates while reconciling open enrollment changes."
+    ]
+  },
+  {
+    id: "api-hcm-salaries-create",
+    suite: "HCM",
+    module: "Compensation",
+    operation: "Create Salary",
+    method: "POST",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/salaries",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-salaries.html",
+    description: "Create salary records for compensation management integrations.",
+    difficulty: "Advanced",
+    tags: ["HCM", "Compensation", "Salary"],
+    requiredHeaders: headerPresets.authJson,
+    sampleRequest: {
+      PersonNumber: "E10427",
+      SalaryAmount: 98000,
+      CurrencyCode: "USD",
+      EffectiveStartDate: "2026-05-01"
+    },
+    sampleResponse: {
+      SalaryId: 300100772209901,
+      PersonNumber: "E10427",
+      Status: "Approved"
+    },
+    tips: [
+      "Ensure grade/step and legal employer rules are satisfied.",
+      "Use secure integration users because compensation is sensitive."
+    ]
+  },
+  {
+    id: "api-hcm-positions-create",
+    suite: "HCM",
+    module: "Positions",
+    operation: "Create Position",
+    method: "POST",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/positions",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-positions.html",
+    description: "Create positions used in hiring and organizational planning.",
+    difficulty: "Intermediate",
+    tags: ["HCM", "Positions", "Organization"],
+    requiredHeaders: headerPresets.authJson,
+    sampleRequest: {
+      PositionCode: "ENG-PLAT-SR-01",
+      Name: "Senior Platform Engineer",
+      DepartmentName: "Cloud Platform Engineering"
+    },
+    sampleResponse: {
+      PositionId: 300100778845210,
+      PositionCode: "ENG-PLAT-SR-01",
+      HiringStatus: "Approved"
+    },
+    tips: [
+      "Position creation rules can depend on business unit and department setup.",
+      "Use position IDs for requisition and assignment mappings."
+    ]
+  },
+  {
+    id: "api-hcm-grades-get",
+    suite: "HCM",
+    module: "Grades",
+    operation: "Get Grades",
+    method: "GET",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/grades",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-grades.html",
+    description: "Read grade structures for assignment and salary validations.",
+    difficulty: "Beginner",
+    tags: ["HCM", "Grades", "Compensation"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=GradeCode=IC4&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ GradeCode: "IC4", GradeName: "Individual Contributor 4" }]
+    },
+    tips: [
+      "Sync grade references before worker or salary updates.",
+      "Treat grade and ladder mappings as master data."
+    ]
+  },
+  {
+    id: "api-hcm-payroll-relationships-get",
+    suite: "HCM",
+    module: "Payroll",
+    operation: "Get Payroll Relationships",
+    method: "GET",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/payrollRelationships",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-payroll-relationships.html",
+    description: "Retrieve payroll relationships for payroll run orchestration and sync.",
+    difficulty: "Intermediate",
+    tags: ["HCM", "Payroll", "Relationships"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=PersonNumber=E10427&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ PersonNumber: "E10427", PayrollName: "US Monthly Payroll", PayrollRelationshipNumber: "PR-7712" }]
+    },
+    tips: [
+      "Relationship data is essential before posting payroll elements.",
+      "Join with assignments for complete payroll context."
+    ]
+  },
+  {
+    id: "api-hcm-element-entries-create",
+    suite: "HCM",
+    module: "Payroll",
+    operation: "Create Element Entry",
+    method: "POST",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/elementEntries",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-element-entries.html",
+    description: "Create payroll element entries such as allowances and deductions.",
+    difficulty: "Advanced",
+    tags: ["HCM", "Payroll", "Element Entries"],
+    requiredHeaders: headerPresets.authJson,
+    sampleRequest: {
+      PersonNumber: "E10427",
+      ElementName: "Transport Allowance",
+      EntryType: "Amount",
+      EntryValue: 150
+    },
+    sampleResponse: {
+      ElementEntryId: 300100780005227,
+      PersonNumber: "E10427",
+      Status: "Processed"
+    },
+    tips: [
+      "Validate input values and eligibility rules for each payroll element.",
+      "Control retries carefully to avoid duplicate element entries."
+    ]
+  },
+  {
+    id: "api-hcm-work-schedules-get",
+    suite: "HCM",
+    module: "Time and Labor",
+    operation: "Get Work Schedules",
+    method: "GET",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/workSchedules",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-work-schedules.html",
+    description: "Read work schedule definitions for time, attendance, and shift integrations.",
+    difficulty: "Intermediate",
+    tags: ["HCM", "Time and Labor", "Schedules"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=ScheduleName=India%205-Day%20Standard&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ ScheduleName: "India 5-Day Standard", Periodicity: "Weekly" }]
+    },
+    tips: [
+      "Align schedule IDs with external time systems.",
+      "Fetch shifts and exceptions only when needed for performance."
+    ]
+  },
+  {
+    id: "api-hcm-goals-create",
+    suite: "HCM",
+    module: "Talent Management",
+    operation: "Create Performance Goal",
+    method: "POST",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/goals",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-goals.html",
+    description: "Create goals for employee performance and talent processes.",
+    difficulty: "Intermediate",
+    tags: ["HCM", "Talent Management", "Goals"],
+    requiredHeaders: headerPresets.authJson,
+    sampleRequest: {
+      PersonNumber: "E10427",
+      GoalName: "Implement Oracle Integration automation framework",
+      TargetCompletionDate: "2026-09-30"
+    },
+    sampleResponse: {
+      GoalId: 300100782118744,
+      GoalName: "Implement Oracle Integration automation framework",
+      Status: "In Progress"
+    },
+    tips: [
+      "Goal plans and review periods should be configured before create calls.",
+      "Use goal IDs to sync progress updates from external systems."
+    ]
+  },
+  {
+    id: "api-hcm-learning-records-get",
+    suite: "HCM",
+    module: "Learning",
+    operation: "Get Learning Records",
+    method: "GET",
+    endpoint: "/hcmRestApi/resources/11.13.18.05/learningRecords",
+    docLink: "https://docs.oracle.com/en/cloud/saas/human-resources/farws/api-learning-records.html",
+    description: "Retrieve learning assignments and completion records for L&D integrations.",
+    difficulty: "Beginner",
+    tags: ["HCM", "Learning", "Training"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=PersonNumber=E10427&limit=30"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ PersonNumber: "E10427", CourseName: "Secure OCI Foundations", CompletionStatus: "Completed" }]
+    },
+    tips: [
+      "Use completion timestamps for compliance reporting.",
+      "Batch by learning item IDs for scalable sync jobs."
     ]
   },
   {

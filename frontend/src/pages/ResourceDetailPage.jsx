@@ -10,7 +10,11 @@ import {
   Sparkles
 } from "lucide-react";
 import ResourceCard from "../components/ResourceCard";
-import { API_BASE_URL, getResourceById, summarizeResourceById } from "../api/client";
+import {
+  buildResourceResolverUrl,
+  getResourceById,
+  summarizeResourceById
+} from "../api/client";
 
 const YOUTUBE_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 
@@ -51,13 +55,6 @@ const resolveYoutubeWatchLink = (link, youtubeId) => {
   const finalId = preferredId || extractedId;
 
   return finalId ? `https://www.youtube.com/watch?v=${finalId}` : "";
-};
-
-const buildYoutubeResolverUrl = (videoUrl, title) => {
-  const params = new URLSearchParams();
-  params.set("videoUrl", videoUrl || "");
-  params.set("title", title || "Oracle tutorial");
-  return `${API_BASE_URL}/resolve/youtube?${params.toString()}`;
 };
 
 const ResourceDetailPage = ({ bookmarkState }) => {
@@ -173,10 +170,8 @@ const ResourceDetailPage = ({ bookmarkState }) => {
   const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
     `${resource.title} Oracle`
   )}`;
-  const youtubeResolverUrl = buildYoutubeResolverUrl(resource.link, resource.title);
-  const primaryCtaHref = isYoutubeResource
-    ? youtubeResolverUrl || watchVideoHref || youtubeSearchUrl
-    : resource.link;
+  const primaryCtaHref =
+    buildResourceResolverUrl(resource) || watchVideoHref || youtubeSearchUrl || resource.link;
   const primaryCtaLabel = isYoutubeResource
     ? watchVideoHref
       ? "Watch on YouTube"

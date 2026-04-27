@@ -85,6 +85,9 @@ const WEB_SOURCE_PROFILES = [
 
 const YOUTUBE_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 const YOUTUBE_AVAILABILITY_TTL_MS = 1000 * 60 * 60 * 6;
+const URL_REACHABILITY_TIMEOUT_MS = 7000;
+const REQUEST_USER_AGENT =
+  "Mozilla/5.0 (compatible; OracleLearningHubBot/1.0; +https://github.com)";
 const youtubeAvailabilityCache = new Map();
 const SEARCH_STOP_WORDS = new Set([
   "a",
@@ -174,26 +177,71 @@ const applyFilters = (dataset, query) => {
 
 const querySearch = (dataset, searchText) => {
   const normalizedQuery = normalize(searchText);
+  const tokens = splitSearchTokens(searchText);
 
   if (!normalizedQuery) {
     return dataset;
   }
 
-  return dataset.filter((item) => {
-    const itemTags = Array.isArray(item.tags) ? item.tags : [];
-    const haystack = [
-      item.title,
-      item.description,
-      item.source,
-      item.category,
-      item.difficulty,
-      ...itemTags
-    ]
-      .join(" ")
-      .toLowerCase();
+  const scored = dataset
+    .map((item) => {
+      const itemTags = Array.isArray(item.tags) ? item.tags : [];
+      const title = normalize(item.title);
+      const description = normalize(item.description);
+      const source = normalize(item.source);
+      const category = normalize(item.category);
+      const difficulty = normalize(item.difficulty);
+      const tagText = normalize(itemTags.join(" "));
+      const haystack = [title, description, source, category, difficulty, tagText].join(" ");
+      const textCoverage = getTokenCoverage(haystack, tokens);
+      const titleCoverage = getTokenCoverage(title, tokens);
+      const tagCoverage = getTokenCoverage(tagText, tokens);
+      const exactTitleMatch = title.includes(normalizedQuery);
+      const exactDescriptionMatch = description.includes(normalizedQuery);
 
-    return haystack.includes(normalizedQuery);
-  });
+      if (!exactTitleMatch && !exactDescriptionMatch && tokens.length > 0 && textCoverage <= 0) {
+        return null;
+      }
+
+      if (
+        !exactTitleMatch &&
+        tokens.length >= 2 &&
+        titleCoverage === 0 &&
+        tagCoverage === 0 &&
+        textCoverage < 0.25
+      ) {
+        return null;
+      }
+
+      let score = 0;
+      score += exactTitleMatch ? 42 : 0;
+      score += exactDescriptionMatch ? 16 : 0;
+      score += countTokenMatches(title, tokens) * 11;
+      score += countTokenMatches(description, tokens) * 6;
+      score += countTokenMatches(category, tokens) * 8;
+      score += countTokenMatches(tagText, tokens) * 10;
+      score += countTokenMatches(source, tokens) * 4;
+      score += Math.round(textCoverage * 25);
+      score += Math.round(titleCoverage * 20);
+
+      if (tokens.length >= 2 && titleCoverage >= 0.5) {
+        score += 10;
+      }
+
+      if (score <= 0) {
+        return null;
+      }
+
+      return {
+        ...item,
+        relevanceScore: score
+      };
+    })
+    .filter(Boolean);
+
+  return scored.sort(
+    (a, b) => b.relevanceScore - a.relevanceScore || a.title.localeCompare(b.title)
+  );
 };
 
 const groupByType = (dataset) => {
@@ -336,6 +384,29 @@ const splitSearchTokens = (searchText) =>
     .filter((token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token))
     .slice(0, 10);
 
+const tokenizeText = (text) =>
+  normalize(text)
+    .split(/[^a-z0-9+-]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+const normalizeExternalUrl = (urlValue) => {
+  const candidate = (urlValue || "").toString().trim();
+  if (!candidate) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(candidate)) {
+    return candidate;
+  }
+
+  if (/^www\./i.test(candidate)) {
+    return `https://${candidate}`;
+  }
+
+  return candidate;
+};
+
 const safeParseUrl = (link) => {
   if (!link) {
     return null;
@@ -429,9 +500,9 @@ const countTokenMatches = (text, tokens) => {
     return 0;
   }
 
-  const haystack = normalize(text);
+  const tokenSet = new Set(tokenizeText(text));
   return tokens.reduce(
-    (count, token) => count + (haystack.includes(token) ? 1 : 0),
+    (count, token) => count + (tokenSet.has(token) ? 1 : 0),
     0
   );
 };
@@ -658,14 +729,29 @@ const collectManualTopicResults = (searchText) => {
       );
       const resourceCoverage = getTokenCoverage(resourceText, tokens);
       const exactTitleMatch = normalize(resource.title).includes(normalizedQuery);
+      const titleTokenHits = countTokenMatches(resource.title, tokens);
+      const tagTokenHits = countTokenMatches(
+        Array.isArray(resource.tags) ? resource.tags.join(" ") : "",
+        tokens
+      );
+      const minimumCoverage =
+        tokens.length >= 4 ? 0.2 : tokens.length === 3 ? 0.2 : tokens.length === 2 ? 0.3 : 0;
 
-      if (tokens.length >= 3 && resourceCoverage < 0.18 && !exactTitleMatch) {
+      if (
+        minimumCoverage > 0 &&
+        resourceCoverage < minimumCoverage &&
+        !exactTitleMatch &&
+        titleTokenHits === 0 &&
+        tagTokenHits === 0
+      ) {
         return;
       }
 
       const resourceScore =
         110 +
         collectionScore +
+        titleTokenHits * 14 +
+        tagTokenHits * 10 +
         Math.round(resourceCoverage * 18) +
         (exactTitleMatch ? 20 : 0);
 
@@ -796,8 +882,7 @@ const isYoutubeVideoAvailable = async (youtubeId) => {
   try {
     const response = await fetch(oembedUrl, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; OracleLearningHubBot/1.0; +https://github.com)"
+        "User-Agent": REQUEST_USER_AGENT
       }
     });
 
@@ -826,6 +911,163 @@ const resolveYoutubeDestinationUrl = async ({ videoUrl, title }) => {
 
   const available = await isYoutubeVideoAvailable(normalized.youtubeId);
   return available ? normalized.link : fallbackSearchUrl;
+};
+
+const findSourceProfileForResource = ({ type, source, link }) => {
+  const normalizedType = normalize(type);
+  const normalizedSource = normalize(source);
+  const parsed = safeParseUrl(link);
+  const hostname = normalize(parsed?.hostname).replace(/^www\./, "");
+
+  const byType = WEB_SOURCE_PROFILES.find((profile) => profile.type === normalizedType);
+  if (byType) {
+    return byType;
+  }
+
+  if (hostname.endsWith("docs.oracle.com")) {
+    return WEB_SOURCE_PROFILES.find((profile) => profile.type === "docs");
+  }
+
+  if (hostname.endsWith("blogs.oracle.com")) {
+    return WEB_SOURCE_PROFILES.find((profile) => profile.type === "blogs");
+  }
+
+  if (hostname === "youtu.be" || hostname.endsWith("youtube.com")) {
+    return WEB_SOURCE_PROFILES.find((profile) => profile.type === "videos");
+  }
+
+  if (hostname.endsWith("github.com")) {
+    return WEB_SOURCE_PROFILES.find((profile) => profile.type === "labs");
+  }
+
+  if (normalizedSource.includes("youtube") || normalizedSource.includes("video")) {
+    return WEB_SOURCE_PROFILES.find((profile) => profile.type === "videos");
+  }
+
+  if (normalizedSource.includes("blog")) {
+    return WEB_SOURCE_PROFILES.find((profile) => profile.type === "blogs");
+  }
+
+  if (normalizedSource.includes("github") || normalizedSource.includes("lab")) {
+    return WEB_SOURCE_PROFILES.find((profile) => profile.type === "labs");
+  }
+
+  return WEB_SOURCE_PROFILES.find((profile) => profile.type === "docs");
+};
+
+const buildOracleFallbackSearchUrl = ({ title, type, source, link }) => {
+  const normalizedLink = normalizeExternalUrl(link);
+  const profile = findSourceProfileForResource({
+    type,
+    source,
+    link: normalizedLink
+  });
+  const parsed = safeParseUrl(normalizedLink);
+  const hostname = parsed ? normalize(parsed.hostname).replace(/^www\./, "") : "";
+  const siteHint = profile?.searchSite
+    ? `site:${profile.searchSite}`
+    : hostname
+      ? `site:${hostname}`
+      : "site:docs.oracle.com";
+  const query = [siteHint, "oracle", title || "", source || "", type || ""]
+    .map((value) => (value || "").toString().trim())
+    .filter(Boolean)
+    .join(" ");
+
+  return `${WEB_SEARCH_ENGINE_URL}?q=${encodeURIComponent(
+    query || "oracle learning resources"
+  )}&kl=us-en`;
+};
+
+const checkHttpReachability = async (url, method = "HEAD") => {
+  const abortController = new AbortController();
+  const timeout = setTimeout(
+    () => abortController.abort(),
+    URL_REACHABILITY_TIMEOUT_MS
+  );
+
+  try {
+    const response = await fetch(url, {
+      method,
+      redirect: "follow",
+      signal: abortController.signal,
+      headers: {
+        "User-Agent": REQUEST_USER_AGENT
+      }
+    });
+
+    return response;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const isResourceUrlReachable = async (urlValue) => {
+  const normalizedUrl = normalizeExternalUrl(urlValue);
+  const parsed = safeParseUrl(normalizedUrl);
+  if (!parsed) {
+    return false;
+  }
+
+  const headResponse = await checkHttpReachability(normalizedUrl, "HEAD");
+  if (headResponse?.ok) {
+    return true;
+  }
+
+  if (headResponse && [401, 403].includes(headResponse.status)) {
+    return true;
+  }
+
+  if (!headResponse || [405, 501].includes(headResponse.status)) {
+    const getResponse = await checkHttpReachability(normalizedUrl, "GET");
+    if (getResponse?.ok) {
+      return true;
+    }
+
+    if (getResponse && [401, 403].includes(getResponse.status)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const resolveResourceDestinationUrl = async ({
+  resourceUrl,
+  title,
+  type,
+  source
+}) => {
+  const normalizedUrl = normalizeExternalUrl(resourceUrl);
+  const fallbackSearchUrl = buildOracleFallbackSearchUrl({
+    title,
+    type,
+    source,
+    link: normalizedUrl
+  });
+  const normalizedType = normalize(type);
+  const normalizedSource = normalize(source);
+
+  if (!normalizedUrl) {
+    return fallbackSearchUrl;
+  }
+
+  if (
+    normalizedType === "videos" ||
+    normalizedSource.includes("youtube") ||
+    normalizedUrl.includes("youtube.com") ||
+    normalizedUrl.includes("youtu.be")
+  ) {
+    return resolveYoutubeDestinationUrl({
+      videoUrl: normalizedUrl,
+      title
+    });
+  }
+
+  const reachable = await isResourceUrlReachable(normalizedUrl);
+  return reachable ? normalizedUrl : fallbackSearchUrl;
 };
 
 const inferDifficultyFromText = (text) => {
@@ -918,8 +1160,7 @@ const fetchWebResultsForSource = async (searchText, profile) => {
     const response = await fetch(requestUrl, {
       signal: abortController.signal,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; OracleLearningHubBot/1.0; +https://github.com)"
+        "User-Agent": REQUEST_USER_AGENT
       }
     });
 
@@ -1267,6 +1508,31 @@ app.get("/search/web", async (req, res) => {
     results: paginated.items,
     failedSources
   });
+});
+
+app.get("/resolve/resource", async (req, res) => {
+  const resourceUrl = (req.query.url || req.query.link || "").toString();
+  const title = (req.query.title || "").toString();
+  const type = (req.query.type || "").toString();
+  const source = (req.query.source || "").toString();
+  const fallbackSearchUrl = buildOracleFallbackSearchUrl({
+    title,
+    type,
+    source,
+    link: resourceUrl
+  });
+
+  try {
+    const destination = await resolveResourceDestinationUrl({
+      resourceUrl,
+      title,
+      type,
+      source
+    });
+    return res.redirect(302, destination || fallbackSearchUrl);
+  } catch {
+    return res.redirect(302, fallbackSearchUrl);
+  }
 });
 
 app.get("/resolve/youtube", async (req, res) => {
