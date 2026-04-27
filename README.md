@@ -25,6 +25,7 @@ A full-stack web application to discover curated Oracle learning resources acros
 - Resource Detail:
   - Full content metadata
   - Embedded YouTube preview (when available)
+  - On-demand grounded technical summary (quick steps + technical coverage + source snippets)
   - Source link, tags, suggested learning paths, related resources
 - Learning Paths:
   - Predefined paths such as:
@@ -106,6 +107,7 @@ VITE_API_BASE_URL=http://localhost:5000
 - `GET /health`
 - `GET /resources`
 - `GET /resources/:id`
+- `POST /resources/:id/summary`
 - `GET /search?q=keyword`
 - `GET /search/web?q=keyword`
 - `GET /learning-paths`
@@ -159,6 +161,16 @@ curl -X POST http://localhost:5000/ai/recommend \
 ```
 
 If OpenAI is unavailable or not configured, the endpoint automatically returns curated fallback recommendations.
+
+Resource summary API example:
+
+```bash
+curl -X POST http://localhost:5000/resources/res-001/summary \
+  -H "Content-Type: application/json" \
+  -d "{}"
+```
+
+If OpenAI is unavailable, summary still works using grounded extractive fallback from fetched source text and resource metadata.
 
 ## Sample Data
 

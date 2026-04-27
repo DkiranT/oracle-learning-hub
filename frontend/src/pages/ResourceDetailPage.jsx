@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowUpRight, Bookmark, BookmarkCheck, LinkIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Bookmark,
+  BookmarkCheck,
+  LinkIcon,
+  LoaderCircle,
+  Sparkles
+} from "lucide-react";
 import ResourceCard from "../components/ResourceCard";
-import { API_BASE_URL, getResourceById } from "../api/client";
+import { API_BASE_URL, getResourceById, summarizeResourceById } from "../api/client";
 
 const YOUTUBE_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 
@@ -59,6 +67,9 @@ const ResourceDetailPage = ({ bookmarkState }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showEmbed, setShowEmbed] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryData, setSummaryData] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -92,7 +103,38 @@ const ResourceDetailPage = ({ bookmarkState }) => {
 
   useEffect(() => {
     setShowEmbed(false);
+    setSummaryLoading(false);
+    setSummaryError("");
+    setSummaryData(null);
   }, [id]);
+
+  const handleSummarizeResource = async () => {
+    if (!resource || summaryLoading) {
+      return;
+    }
+
+    setSummaryLoading(true);
+    setSummaryError("");
+
+    try {
+      const summary = await summarizeResourceById(resource.id, {
+        url: resource.link,
+        title: resource.title,
+        source: resource.source,
+        type: resource.type,
+        difficulty: resource.difficulty,
+        description: resource.description,
+        tags: resource.tags
+      });
+      setSummaryData(summary);
+    } catch {
+      setSummaryError(
+        "Could not generate summary right now. Please try again in a moment."
+      );
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -195,7 +237,7 @@ const ResourceDetailPage = ({ bookmarkState }) => {
             <LinkIcon size={14} />
             {primaryCtaLabel}
           </a>
-          {isYoutubeResource && (
+            {isYoutubeResource && (
             <a
               href={youtubeSearchUrl}
               target="_blank"
@@ -205,11 +247,175 @@ const ResourceDetailPage = ({ bookmarkState }) => {
               Find Similar on YouTube
             </a>
           )}
+          <button
+            onClick={handleSummarizeResource}
+            disabled={summaryLoading}
+            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-800 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-80"
+          >
+            {summaryLoading ? (
+              <>
+                <LoaderCircle size={14} className="animate-spin" />
+                Generating Summary...
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} />
+                {summaryData ? "Regenerate Technical Summary" : "Get Quick Technical Summary"}
+              </>
+            )}
+          </button>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
             Source: {resource.source}
           </span>
         </div>
       </section>
+
+      {(summaryData || summaryLoading || summaryError) && (
+        <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-2xl font-semibold text-slate-900">
+              Grounded Summary
+            </h2>
+            {summaryData?.summary?.modelSource && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                Source Model: {summaryData.summary.modelSource}
+              </span>
+            )}
+          </div>
+
+          {summaryLoading && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              Building summary from source content...
+            </div>
+          )}
+
+          {summaryError && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {summaryError}
+            </div>
+          )}
+
+          {summaryData && (
+            <>
+              <p className="text-sm text-slate-600">
+                {summaryData.summary?.text || "Summary could not be generated for this resource."}
+              </p>
+
+              {summaryData.summary?.quickSteps?.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Quick Implementation Steps
+                  </h3>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {summaryData.summary.quickSteps.map((item, index) => (
+                      <li key={`${item}-${index}`} className="rounded-lg bg-slate-50 px-3 py-2">
+                        {index + 1}. {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {summaryData.summary?.technicalCoverage?.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Technical Coverage</h3>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {summaryData.summary.technicalCoverage.map((item) => (
+                      <li key={item} className="rounded-lg bg-slate-50 px-3 py-2">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {summaryData.summary?.keyTakeaways?.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Key Takeaways</h3>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {summaryData.summary.keyTakeaways.map((item) => (
+                      <li key={item} className="rounded-lg bg-slate-50 px-3 py-2">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {summaryData.summary?.shortcuts?.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Shortcuts and Tips</h3>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {summaryData.summary.shortcuts.map((item) => (
+                      <li key={item} className="rounded-lg bg-slate-50 px-3 py-2">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {summaryData.summary?.prerequisites?.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Prerequisites</h3>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {summaryData.summary.prerequisites.map((item) => (
+                      <li key={item} className="rounded-lg bg-slate-50 px-3 py-2">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {summaryData.summary?.notCovered?.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Not Clearly Covered</h3>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {summaryData.summary.notCovered.map((item) => (
+                      <li key={item} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {summaryData.sourceContent?.groundingSnippets?.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Source Snippets Used</h3>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {summaryData.sourceContent.groundingSnippets.slice(0, 5).map((item) => (
+                      <li key={item} className="rounded-lg bg-slate-50 px-3 py-2">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+                <p>
+                  Confidence:{" "}
+                  <span className="font-semibold uppercase">
+                    {summaryData.summary?.confidence || "medium"}
+                  </span>
+                </p>
+                <p className="mt-1">
+                  Generated at: {summaryData.sourceContent?.fetchedAt || "N/A"} | Fetch status:{" "}
+                  {summaryData.sourceContent?.fetchStatus || "N/A"}
+                </p>
+                {summaryData.sourceContent?.insufficientContent && (
+                  <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-amber-700">
+                    <AlertTriangle size={12} />
+                    Source access was limited. Verify critical details in original content.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       {isYoutubeResource && (
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-soft md:p-6">

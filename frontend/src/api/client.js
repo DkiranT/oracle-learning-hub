@@ -30,6 +30,22 @@ const fetchJson = async (path, params) => {
   return response.json();
 };
 
+const postJson = async (path, payload = {}) => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+
+  return response.json();
+};
+
 export const getResources = async (params = {}) => {
   const data = await fetchJson("/resources", params);
   return data.resources || [];
@@ -56,3 +72,6 @@ export const getKnowledgeTopics = (params = {}) =>
 
 export const getFusionApiPlaybooks = (params = {}) =>
   fetchJson("/knowledge/apis", params);
+
+export const summarizeResourceById = (id, payload = {}) =>
+  postJson(`/resources/${id}/summary`, payload);

@@ -7,6 +7,7 @@ const {
   manualTopicCollections,
   fusionApiPlaybooks
 } = require("./data/knowledgeHub");
+const { createResourceSummaryService } = require("./summarizer");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,6 +15,13 @@ const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const WEB_SEARCH_ENGINE_URL =
   process.env.WEB_SEARCH_ENGINE_URL || "https://duckduckgo.com/html/";
+const resourceSummaryService = createResourceSummaryService({
+  resources,
+  manualTopicCollections,
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
+  openaiBaseUrl: OPENAI_BASE_URL,
+  openaiModel: process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL
+});
 
 app.use(cors());
 app.use(express.json());
@@ -1129,6 +1137,29 @@ app.get("/resources/:id", (req, res) => {
     ...withPathSuggestions(resource),
     relatedResources
   });
+});
+
+app.post("/resources/:id/summary", (req, res) => {
+  const run = async () => {
+    try {
+      const payload = await resourceSummaryService.getSummaryForResource({
+        resourceId: req.params.id,
+        ...(req.body || {})
+      });
+
+      return res.json(payload);
+    } catch (error) {
+      const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+      return res.status(statusCode).json({
+        message:
+          statusCode >= 500
+            ? "Summary generation failed for this resource."
+            : error.message || "Invalid summary request."
+      });
+    }
+  };
+
+  return run();
 });
 
 app.get("/search", (req, res) => {
