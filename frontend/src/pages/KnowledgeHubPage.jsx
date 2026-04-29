@@ -2,15 +2,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Copy,
+  Database,
   Download,
   FlaskConical,
   Link2,
   Newspaper,
   PlayCircle,
+  Search,
   Terminal
 } from "lucide-react";
 import ResourceCard from "../components/ResourceCard";
-import { getFusionApiPlaybooks, getKnowledgeTopics } from "../api/client";
+import {
+  getFusionApiPlaybooks,
+  getKnowledgeBaseItems,
+  getKnowledgeTopics
+} from "../api/client";
 
 const sectionMeta = {
   docs: { title: "Docs", icon: BookOpen },
@@ -206,6 +212,15 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
     grouped: emptyGrouped,
     topics: []
   });
+  const [knowledgeQuery, setKnowledgeQuery] = useState("");
+  const [knowledgeType, setKnowledgeType] = useState("all");
+  const [knowledgeTopic, setKnowledgeTopic] = useState("all");
+  const [knowledgeLoading, setKnowledgeLoading] = useState(true);
+  const [knowledgeError, setKnowledgeError] = useState("");
+  const [knowledgePayload, setKnowledgePayload] = useState({
+    items: [],
+    facets: { products: [], topics: [], sourceTypes: [], versions: [] }
+  });
 
   const [suiteFilter, setSuiteFilter] = useState("all");
   const [moduleFilter, setModuleFilter] = useState("all");
@@ -215,7 +230,13 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
   const [apiError, setApiError] = useState("");
   const [apiPayload, setApiPayload] = useState({
     playbooks: [],
-    facets: { suites: [], modules: [], operations: [], suiteModules: {} }
+    facets: {
+      suites: [],
+      modules: [],
+      operations: [],
+      suiteModules: {},
+      suiteModuleOperations: {}
+    }
   });
   const [copiedToken, setCopiedToken] = useState("");
   const [cardModes, setCardModes] = useState({});
@@ -271,6 +292,58 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
   useEffect(() => {
     let active = true;
 
+    const loadKnowledgeBase = async () => {
+      setKnowledgeLoading(true);
+      setKnowledgeError("");
+
+      try {
+        const params = { limit: 12 };
+        if (knowledgeQuery.trim()) {
+          params.q = knowledgeQuery.trim();
+        }
+        if (knowledgeType !== "all") {
+          params.sourceType = knowledgeType;
+        }
+        if (knowledgeTopic !== "all") {
+          params.topic = knowledgeTopic;
+        }
+
+        const data = await getKnowledgeBaseItems(params);
+        if (!active) {
+          return;
+        }
+
+        setKnowledgePayload({
+          items: data.items || [],
+          facets:
+            data.facets || {
+              products: [],
+              topics: [],
+              sourceTypes: [],
+              versions: []
+            }
+        });
+      } catch {
+        if (active) {
+          setKnowledgeError("Could not load RAG-ready knowledge items right now.");
+        }
+      } finally {
+        if (active) {
+          setKnowledgeLoading(false);
+        }
+      }
+    };
+
+    loadKnowledgeBase();
+
+    return () => {
+      active = false;
+    };
+  }, [knowledgeQuery, knowledgeType, knowledgeTopic]);
+
+  useEffect(() => {
+    let active = true;
+
     const loadApis = async () => {
       setApiLoading(true);
       setApiError("");
@@ -302,7 +375,8 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
               suites: [],
               modules: [],
               operations: [],
-              suiteModules: {}
+              suiteModules: {},
+              suiteModuleOperations: {}
             }
         });
       } catch {
@@ -337,9 +411,36 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
   }, [apiPayload.facets, suiteFilter]);
 
   const operationOptions = useMemo(() => {
-    const ops = apiPayload.playbooks.map((item) => item.operation);
-    return [...new Set(ops)].sort();
-  }, [apiPayload.playbooks]);
+    const operationMap = apiPayload.facets?.suiteModuleOperations || {};
+
+    if (suiteFilter !== "all" && moduleFilter !== "all") {
+      return operationMap[suiteFilter]?.[moduleFilter] || [];
+    }
+
+    if (suiteFilter !== "all") {
+      const suiteOperations = Object.values(operationMap[suiteFilter] || {}).flat();
+      return [...new Set(suiteOperations)].sort();
+    }
+
+    if (moduleFilter !== "all") {
+      const moduleOperations = Object.values(operationMap).flatMap(
+        (moduleMap) => moduleMap[moduleFilter] || []
+      );
+      return [...new Set(moduleOperations)].sort();
+    }
+
+    return apiPayload.facets?.operations || [];
+  }, [apiPayload.facets, moduleFilter, suiteFilter]);
+
+  const knowledgeTopicOptions = useMemo(
+    () => knowledgePayload.facets?.topics || [],
+    [knowledgePayload.facets]
+  );
+
+  const knowledgeTypeOptions = useMemo(
+    () => knowledgePayload.facets?.sourceTypes || [],
+    [knowledgePayload.facets]
+  );
 
   const suiteModuleCoverage = useMemo(() => {
     const suiteModules = apiPayload.facets?.suiteModules || {};
@@ -466,6 +567,132 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
             </p>
           </button>
         </div>
+      </section>
+
+      <section className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-soft md:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 font-display text-2xl font-semibold text-slate-900">
+              <Database size={21} />
+              RAG-ready OIC Knowledge Base
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Search indexed OIC docs, videos, blogs, and labs with source metadata.
+            </p>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+            {knowledgeLoading
+              ? "Index loading"
+              : `${knowledgePayload.items.length} matched item${
+                  knowledgePayload.items.length === 1 ? "" : "s"
+                }`}
+          </span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[1fr_180px_220px]">
+          <label className="relative">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              value={knowledgeQuery}
+              onChange={(event) => setKnowledgeQuery(event.target.value)}
+              placeholder="Ask OIC technical question, REST Adapter, agentic AI, connectivity..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400"
+            />
+          </label>
+
+          <select
+            value={knowledgeType}
+            onChange={(event) => setKnowledgeType(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400"
+          >
+            <option value="all">All sources</option>
+            {knowledgeTypeOptions.map((sourceType) => (
+              <option key={sourceType} value={sourceType}>
+                {sourceType}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={knowledgeTopic}
+            onChange={(event) => setKnowledgeTopic(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400"
+          >
+            <option value="all">All OIC topics</option>
+            {knowledgeTopicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {knowledgeError && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            {knowledgeError}
+          </div>
+        )}
+
+        {knowledgeLoading ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            Loading knowledge index...
+          </div>
+        ) : knowledgePayload.items.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            No indexed source matched this query. Try broader OIC keywords.
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {knowledgePayload.items.map((item) => (
+              <article
+                key={item.id}
+                className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase text-white">
+                    {item.sourceType}
+                  </span>
+                  <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+                    {item.topic}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                    Score {item.matchScore}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="font-display text-lg font-semibold text-slate-900">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">{item.summary}</p>
+                </div>
+
+                {item.technicalSignals?.length > 0 && (
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {item.technicalSignals.slice(0, 2).map((signal) => (
+                      <li key={signal} className="rounded-lg bg-white px-3 py-2">
+                        {signal}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 hover:text-slate-950"
+                >
+                  <Link2 size={14} />
+                  Open source
+                </a>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section

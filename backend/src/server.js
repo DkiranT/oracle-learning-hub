@@ -7,6 +7,7 @@ const {
   manualTopicCollections,
   fusionApiPlaybooks
 } = require("./data/knowledgeHub");
+const knowledgeBaseItems = require("./data/knowledgeBase");
 const { createResourceSummaryService } = require("./summarizer");
 
 const app = express();
@@ -856,6 +857,153 @@ const filterFusionApiPlaybooks = (query = {}) => {
   });
 };
 
+const buildFusionApiFacets = () => {
+  const suiteModuleOperations = {};
+  const modules = new Set();
+  const operations = new Set();
+  const suites = new Set();
+
+  fusionApiPlaybooks.forEach((item) => {
+    suites.add(item.suite);
+    modules.add(item.module);
+    operations.add(item.operation);
+
+    if (!suiteModuleOperations[item.suite]) {
+      suiteModuleOperations[item.suite] = {};
+    }
+
+    if (!suiteModuleOperations[item.suite][item.module]) {
+      suiteModuleOperations[item.suite][item.module] = new Set();
+    }
+
+    suiteModuleOperations[item.suite][item.module].add(item.operation);
+  });
+
+  const sortedSuiteModuleOperations = Object.fromEntries(
+    Object.entries(suiteModuleOperations)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([suite, moduleMap]) => [
+        suite,
+        Object.fromEntries(
+          Object.entries(moduleMap)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([moduleName, operationSet]) => [
+              moduleName,
+              [...operationSet].sort()
+            ])
+        )
+      ])
+  );
+
+  const suiteModules = Object.fromEntries(
+    Object.entries(sortedSuiteModuleOperations).map(([suite, moduleMap]) => [
+      suite,
+      Object.keys(moduleMap).sort()
+    ])
+  );
+
+  return {
+    suites: [...suites].sort(),
+    modules: [...modules].sort(),
+    operations: [...operations].sort(),
+    suiteModules,
+    suiteModuleOperations: sortedSuiteModuleOperations
+  };
+};
+
+const getKnowledgeBaseHaystack = (item) =>
+  normalize(
+    [
+      item.title,
+      item.source,
+      item.sourceType,
+      item.product,
+      item.topic,
+      item.version,
+      item.difficulty,
+      item.summary,
+      item.chunkText,
+      ...(Array.isArray(item.tags) ? item.tags : []),
+      ...(Array.isArray(item.technicalSignals) ? item.technicalSignals : [])
+    ].join(" ")
+  );
+
+const scoreKnowledgeBaseItem = (item, searchText) => {
+  const normalizedQuery = normalize(searchText);
+  const tokens = splitSearchTokens(searchText);
+  const haystack = getKnowledgeBaseHaystack(item);
+  const title = normalize(item.title);
+  const tags = normalize((item.tags || []).join(" "));
+  const topic = normalize(item.topic);
+  const summary = normalize(item.summary);
+
+  if (!normalizedQuery) {
+    return 1;
+  }
+
+  const coverage = getTokenCoverage(haystack, tokens);
+  const titleCoverage = getTokenCoverage(title, tokens);
+  const tagCoverage = getTokenCoverage(tags, tokens);
+
+  if (!haystack.includes(normalizedQuery) && coverage <= 0) {
+    return 0;
+  }
+
+  let score = 0;
+  score += title.includes(normalizedQuery) ? 48 : 0;
+  score += topic.includes(normalizedQuery) ? 30 : 0;
+  score += summary.includes(normalizedQuery) ? 18 : 0;
+  score += countTokenMatches(title, tokens) * 12;
+  score += countTokenMatches(tags, tokens) * 10;
+  score += countTokenMatches(topic, tokens) * 12;
+  score += Math.round(coverage * 30);
+  score += Math.round(titleCoverage * 22);
+  score += Math.round(tagCoverage * 14);
+
+  return score;
+};
+
+const filterKnowledgeBaseItems = (query = {}) => {
+  const q = (query.q || "").toString().trim();
+  const topic = normalize(query.topic);
+  const sourceType = normalize(query.sourceType || query.type);
+  const product = normalize(query.product);
+  const limit = Math.min(parsePositiveInt(query.limit, 20), 50);
+
+  const ranked = knowledgeBaseItems
+    .filter((item) => {
+      if (topic && normalize(item.topic) !== topic) {
+        return false;
+      }
+
+      if (sourceType && normalize(item.sourceType) !== sourceType) {
+        return false;
+      }
+
+      if (product && normalize(item.product) !== product) {
+        return false;
+      }
+
+      return true;
+    })
+    .map((item) => ({
+      ...item,
+      matchScore: scoreKnowledgeBaseItem(item, q)
+    }))
+    .filter((item) => !q || item.matchScore > 0)
+    .sort((a, b) => b.matchScore - a.matchScore || a.title.localeCompare(b.title))
+    .slice(0, limit);
+
+  return ranked;
+};
+
+const buildKnowledgeBaseFacets = () => ({
+  products: [...new Set(knowledgeBaseItems.map((item) => item.product))].sort(),
+  topics: [...new Set(knowledgeBaseItems.map((item) => item.topic))].sort(),
+  sourceTypes: [...new Set(knowledgeBaseItems.map((item) => item.sourceType))].sort(),
+  versions: [...new Set(knowledgeBaseItems.map((item) => item.version))].sort()
+});
+
 const buildYoutubeSearchUrl = (title) => {
   const seed = (title || "").toString().trim();
   const query = seed ? `${seed} Oracle` : "Oracle tutorial";
@@ -1570,32 +1718,23 @@ app.get("/knowledge/topics", (req, res) => {
 
 app.get("/knowledge/apis", (req, res) => {
   const playbooks = filterFusionApiPlaybooks(req.query);
-  const suites = [...new Set(fusionApiPlaybooks.map((item) => item.suite))];
-  const modules = [...new Set(fusionApiPlaybooks.map((item) => item.module))];
-  const operations = [...new Set(fusionApiPlaybooks.map((item) => item.operation))];
-  const suiteModules = fusionApiPlaybooks.reduce((acc, item) => {
-    if (!acc[item.suite]) {
-      acc[item.suite] = new Set();
-    }
-    acc[item.suite].add(item.module);
-    return acc;
-  }, {});
-
-  const sortedSuiteModules = Object.fromEntries(
-    Object.entries(suiteModules)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([suite, moduleSet]) => [suite, [...moduleSet].sort()])
-  );
+  const facets = buildFusionApiFacets();
 
   res.json({
     total: playbooks.length,
     playbooks,
-    facets: {
-      suites: suites.sort(),
-      modules: modules.sort(),
-      operations: operations.sort(),
-      suiteModules: sortedSuiteModules
-    }
+    facets
+  });
+});
+
+app.get("/knowledge/base", (req, res) => {
+  const items = filterKnowledgeBaseItems(req.query);
+
+  res.json({
+    total: items.length,
+    provider: "local-rag-ready-index",
+    items,
+    facets: buildKnowledgeBaseFacets()
   });
 });
 

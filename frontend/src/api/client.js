@@ -70,6 +70,9 @@ export const getRecommendations = async (params = {}) => {
 export const getKnowledgeTopics = (params = {}) =>
   fetchJson("/knowledge/topics", params);
 
+export const getKnowledgeBaseItems = (params = {}) =>
+  fetchJson("/knowledge/base", params);
+
 export const getFusionApiPlaybooks = (params = {}) =>
   fetchJson("/knowledge/apis", params);
 
