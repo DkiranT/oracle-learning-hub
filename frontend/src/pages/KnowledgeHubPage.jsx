@@ -105,7 +105,7 @@ const downloadJsonFile = (filename, payload) => {
 const buildCurlSnippet = (playbook) => {
   const method = (playbook?.method || "GET").toUpperCase();
   const endpoint = playbook?.endpoint || "/";
-  const url = `https://<your-fusion-host>${endpoint}`;
+  const url = `https://<your-oracle-saas-host>${endpoint}`;
   const headerLines = (playbook?.requiredHeaders || []).map(
     (header) => `  -H "${header.replace(/"/g, '\\"')}"`
   );
@@ -128,7 +128,7 @@ const buildPostmanItem = (playbook) => {
   const pathSegments = endpoint.split("/").filter(Boolean);
 
   const postmanItem = {
-    name: playbook?.operation || "Fusion API Request",
+    name: playbook?.operation || "Oracle SaaS API Request",
     request: {
       method,
       header: (playbook?.requiredHeaders || []).map((line) => {
@@ -140,8 +140,8 @@ const buildPostmanItem = (playbook) => {
         };
       }),
       url: {
-        raw: `{{fusion_host}}/${endpoint}`,
-        host: ["{{fusion_host}}"],
+        raw: `{{oracle_saas_host}}/${endpoint}`,
+        host: ["{{oracle_saas_host}}"],
         path: pathSegments
       },
       description: playbook?.description || ""
@@ -180,23 +180,22 @@ const buildPostmanCollection = (name, playbooks, meta = {}) => {
   ].filter(Boolean);
 
   return {
-  info: {
-    name,
-    schema:
-      "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    description:
-      `Generated from Oracle Learning Hub Fusion REST API Payload Explorer. Includes ${totalItems} operation${
+    info: {
+      name,
+      schema:
+        "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      description: `Generated from Oracle Learning Hub Oracle SaaS REST API Payload Explorer. Includes ${totalItems} operation${
         totalItems === 1 ? "" : "s"
       }${filters.length > 0 ? ` with filters: ${filters.join(", ")}` : ""}.`
-  },
-  item: (playbooks || []).map((playbook) => buildPostmanItem(playbook)),
-  variable: [
-    {
-      key: "fusion_host",
-      value: "your-fusion-host",
-      type: "string"
-    }
-  ]
+    },
+    item: (playbooks || []).map((playbook) => buildPostmanItem(playbook)),
+    variable: [
+      {
+        key: "oracle_saas_host",
+        value: "your-oracle-saas-host",
+        type: "string"
+      }
+    ]
   };
 };
 
@@ -381,7 +380,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
         });
       } catch {
         if (active) {
-          setApiError("Could not load Fusion API playbooks right now.");
+          setApiError("Could not load Oracle SaaS API playbooks right now.");
         }
       } finally {
         if (active) {
@@ -463,7 +462,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
   }, [apiPayload.facets]);
 
   const postmanCollectionName = useMemo(() => {
-    const parts = ["Oracle Learning Hub - Fusion APIs"];
+    const parts = ["Oracle Learning Hub - Oracle SaaS APIs"];
     if (suiteFilter !== "all") {
       parts.push(`Suite ${suiteFilter}`);
     }
@@ -553,7 +552,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
         </h1>
         <p className="max-w-4xl text-sm text-slate-600 md:text-base">
           Backend-curated Oracle links for OIC Gen3, REST Adapter, agentic AI,
-          and Fusion REST. Use dropdown filters to quickly get the exact docs,
+          and Fusion/EPM REST. Use dropdown filters to quickly get the exact docs,
           videos, blogs, and payload-ready API references.
         </p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -570,7 +569,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
             onClick={() => jumpToSection(fusionSectionRef)}
             className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-left text-sm font-semibold text-indigo-900 transition hover:border-indigo-300 hover:bg-indigo-100"
           >
-            Jump to Fusion API Payloads
+            Jump to API Payloads
             <p className="mt-1 text-xs font-medium text-indigo-700">
               {apiLoading
                 ? "Loading API coverage..."
@@ -725,7 +724,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
           <input
             value={topicQuery}
             onChange={(event) => setTopicQuery(event.target.value)}
-            placeholder="Search topic like OIC Gen3, REST Adapter, Fusion REST..."
+            placeholder="Search topic like OIC Gen3, REST Adapter, Fusion/EPM REST..."
             className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400"
           />
           <select
@@ -791,17 +790,17 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
       >
         <div>
           <h2 className="font-display text-2xl font-semibold text-slate-900">
-            Fusion REST API Payload Explorer
+            Oracle SaaS REST API Payload Explorer
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Select app suite and module (for example ERP + AP) to get endpoint,
+            Select app suite and module (for example ERP + AP or EPM + Planning) to get endpoint,
             Oracle doc link, and ready sample request/response payloads.
           </p>
         </div>
 
         {!apiLoading && suiteModuleCoverage.length > 0 && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            <p className="mb-2 font-semibold text-slate-800">Fusion Module Coverage</p>
+            <p className="mb-2 font-semibold text-slate-800">Suite Module Coverage</p>
             <div className="flex flex-wrap gap-2">
               {suiteModuleCoverage.map(([suite, modules]) => (
                 <span
@@ -894,7 +893,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
 
         {apiLoading ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            Loading Fusion API playbooks...
+            Loading Oracle SaaS API playbooks...
           </div>
         ) : apiPayload.playbooks.length === 0 ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -1124,7 +1123,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
         onClick={() => jumpToSection(fusionSectionRef)}
         className="fixed bottom-20 right-5 z-40 rounded-full border border-indigo-200 bg-white/95 px-4 py-2 text-xs font-semibold text-indigo-700 shadow-soft backdrop-blur transition hover:border-indigo-300 hover:bg-indigo-50"
       >
-        Fusion APIs
+        API Payloads
       </button>
     </div>
   );

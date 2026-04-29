@@ -33,9 +33,9 @@ A full-stack web application to discover curated Oracle learning resources acros
     - Streaming Deep Dive
   - Structured step-by-step progression
 - Knowledge Hub:
-  - Backend-curated topic bundles for OIC Gen3, REST Adapter, Agentic AI, and Fusion REST
-  - Dropdown-based Fusion API payload explorer (suite/module/operation)
-  - Ready sample request/response payloads for ERP, Procurement, HCM, and CX APIs
+  - Backend-curated topic bundles for OIC Gen3, REST Adapter, Agentic AI, and Fusion/EPM REST
+  - Dropdown-based Oracle SaaS API payload explorer (suite/module/operation)
+  - Ready sample request/response payloads for ERP, Procurement, HCM, SCM, CX, Projects, and EPM APIs
 - Bookmarking:
   - Save/unsave resources using browser local storage
 
@@ -178,7 +178,8 @@ Mock data is stored in:
 
 - `backend/src/data/resources.js` (26 realistic Oracle resources)
 - `backend/src/data/learningPaths.js` (3 predefined guided paths)
-- `backend/src/data/knowledgeHub.js` (manual topic resources + Fusion API payload playbooks)
+- `backend/src/data/knowledgeHub.js` (manual topic resources)
+- `backend/src/data/fusionApiPlaybooks.js` (Oracle SaaS REST API payload playbooks)
 
 ## Manual URL Curation (Backend-Controlled)
 
@@ -187,7 +188,7 @@ To add your own topic-specific links without changing frontend code:
 1. Edit `backend/src/data/knowledgeHub.js`
 2. Add/update entries under:
    - `manualTopicCollections` for topic docs/videos/blogs/labs
-   - `fusionApiPlaybooks` for API endpoints and payload samples
+3. Edit `backend/src/data/fusionApiPlaybooks.js` for API endpoints and payload samples
 3. Restart backend (`npm run dev`)
 
 ## Future Enhancements
