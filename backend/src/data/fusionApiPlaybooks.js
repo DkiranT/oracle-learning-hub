@@ -191,7 +191,7 @@ const fusionApiPlaybooks = [
   {
     id: "api-erp-ap-payments-create",
     suite: "ERP",
-    module: "AP Payments",
+    module: "AP",
     operation: "Create AP Payment",
     method: "POST",
     endpoint: "/fscmRestApi/resources/11.13.18.05/payments",
@@ -217,9 +217,58 @@ const fusionApiPlaybooks = [
     ]
   },
   {
+    id: "api-erp-ap-payments-get",
+    suite: "ERP",
+    module: "AP",
+    operation: "Get AP Payments",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/payments",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-payments.html",
+    description: "Retrieve supplier payment records for payment status and reconciliation.",
+    difficulty: "Beginner",
+    tags: ["ERP", "AP", "Payments", "Read API"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=PaymentNumber=PAY-2026-1011&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ PaymentNumber: "PAY-2026-1011", PaymentAmount: 1250.75, PaymentStatus: "Issued" }]
+    },
+    tips: [
+      "Filter by payment number, supplier, or payment date for faster lookup.",
+      "Use this before triggering downstream bank reconciliation."
+    ]
+  },
+  {
+    id: "api-erp-ap-invoice-installments-get",
+    suite: "ERP",
+    module: "AP",
+    operation: "Get AP Invoice Installments",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/invoices/{InvoiceId}/child/installments",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-invoices.html",
+    description: "Read invoice installment schedules for due-date and cash-planning flows.",
+    difficulty: "Intermediate",
+    tags: ["ERP", "AP", "Invoices", "Installments"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      pathParams: { InvoiceId: "300100987654321" },
+      queryExample: "?limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ InstallmentNumber: 1, DueDate: "2026-05-15", AmountRemaining: 1250.75 }]
+    },
+    tips: [
+      "Use installment data when payment timing matters.",
+      "Fetch header first, then drill into child resources."
+    ]
+  },
+  {
     id: "api-erp-ar-transactions-get",
     suite: "ERP",
-    module: "AR Transactions",
+    module: "AR",
     operation: "Get Receivables Transactions",
     method: "GET",
     endpoint: "/fscmRestApi/resources/11.13.18.05/receivablesTransactions",
@@ -238,6 +287,58 @@ const fusionApiPlaybooks = [
     tips: [
       "Use transaction number and date filters for targeted sync.",
       "Fetch child lines only when finance detail is required."
+    ]
+  },
+  {
+    id: "api-erp-ar-transactions-create",
+    suite: "ERP",
+    module: "AR",
+    operation: "Create Receivables Transaction",
+    method: "POST",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/receivablesTransactions",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-receivables-transactions.html",
+    description: "Create receivables transaction headers for invoice integration scenarios.",
+    difficulty: "Advanced",
+    tags: ["ERP", "AR", "Transactions", "Invoices"],
+    requiredHeaders: headerPresets.authJsonFramework,
+    sampleRequest: {
+      BusinessUnit: "Vision Operations",
+      TransactionNumber: "INV-2026-77891",
+      TransactionDate: "2026-04-29",
+      BillToCustomerNumber: "1006"
+    },
+    sampleResponse: {
+      CustomerTransactionId: 300100887771203,
+      TransactionNumber: "INV-2026-77891",
+      TransactionStatus: "Complete"
+    },
+    tips: [
+      "Validate customer account, transaction type, and business unit before POST.",
+      "Add child transaction lines when itemized billing is required."
+    ]
+  },
+  {
+    id: "api-erp-ar-standard-receipts-get",
+    suite: "ERP",
+    module: "AR",
+    operation: "Get Standard Receipts",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/standardReceipts",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25c/farfa/api-standard-receipts.html",
+    description: "Retrieve AR receipts for customer payment and cash application status.",
+    difficulty: "Beginner",
+    tags: ["ERP", "AR", "Receipts", "Read API"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=ReceiptNumber=RCPT-2026-00691&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ ReceiptNumber: "RCPT-2026-00691", Amount: 990, Status: "Unapplied" }]
+    },
+    tips: [
+      "Use receipt status to drive collections and reconciliation workflows.",
+      "Apply receipt to transactions only after customer and amount validation."
     ]
   },
   {
@@ -293,9 +394,61 @@ const fusionApiPlaybooks = [
     ]
   },
   {
+    id: "api-erp-gl-journals-get",
+    suite: "ERP",
+    module: "GL",
+    operation: "Get Journals",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/journals",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-journals.html",
+    description: "Retrieve journals for accounting validation, reconciliation, and audit.",
+    difficulty: "Beginner",
+    tags: ["ERP", "GL", "Journals", "Read API"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      queryExample: "?q=JournalName=INTF-APR-ADJ-11&limit=20"
+    },
+    sampleResponse: {
+      count: 1,
+      items: [{ JournalName: "INTF-APR-ADJ-11", LedgerName: "Vision Operations", Status: "Unposted" }]
+    },
+    tips: [
+      "Use journal name, ledger, period, and source filters.",
+      "Avoid wide journal extracts without pagination."
+    ]
+  },
+  {
+    id: "api-erp-gl-journal-lines-get",
+    suite: "ERP",
+    module: "GL",
+    operation: "Get Journal Lines",
+    method: "GET",
+    endpoint: "/fscmRestApi/resources/11.13.18.05/journals/{JournalId}/child/journalLines",
+    docLink: "https://docs.oracle.com/en/cloud/saas/financials/25d/farfa/api-journals.html",
+    description: "Retrieve journal line details for accounting analysis and downstream reporting.",
+    difficulty: "Intermediate",
+    tags: ["ERP", "GL", "Journals", "Lines"],
+    requiredHeaders: headerPresets.authOnly,
+    sampleRequest: {
+      pathParams: { JournalId: "300100700220981" },
+      queryExample: "?limit=100"
+    },
+    sampleResponse: {
+      count: 2,
+      items: [
+        { LineNumber: 1, AccountCombination: "01-000-2210-0000", EnteredDrAmount: 500 },
+        { LineNumber: 2, AccountCombination: "01-000-1100-0000", EnteredCrAmount: 500 }
+      ]
+    },
+    tips: [
+      "Fetch lines only after narrowing journal headers.",
+      "Keep account combinations intact for reconciliation."
+    ]
+  },
+  {
     id: "api-erp-gl-period-statuses-get",
     suite: "ERP",
-    module: "GL Periods",
+    module: "GL",
     operation: "Get Period Statuses",
     method: "GET",
     endpoint: "/fscmRestApi/resources/11.13.18.05/accountingPeriods",

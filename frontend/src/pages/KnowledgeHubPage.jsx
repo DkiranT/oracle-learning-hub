@@ -410,6 +410,19 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
     return apiPayload.facets?.modules || [];
   }, [apiPayload.facets, suiteFilter]);
 
+  const getModuleOperationCount = (moduleName) => {
+    const operationMap = apiPayload.facets?.suiteModuleOperations || {};
+
+    if (suiteFilter !== "all") {
+      return operationMap[suiteFilter]?.[moduleName]?.length || 0;
+    }
+
+    return Object.values(operationMap).reduce(
+      (total, moduleMap) => total + (moduleMap[moduleName]?.length || 0),
+      0
+    );
+  };
+
   const operationOptions = useMemo(() => {
     const operationMap = apiPayload.facets?.suiteModuleOperations || {};
 
@@ -831,7 +844,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
             <option value="all">All modules</option>
             {moduleOptions.map((module) => (
               <option key={module} value={module}>
-                {module}
+                {module} ({getModuleOperationCount(module)} ops)
               </option>
             ))}
           </select>
