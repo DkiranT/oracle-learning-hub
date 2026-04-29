@@ -9,6 +9,7 @@ const {
 } = require("./data/knowledgeHub");
 const knowledgeBaseItems = require("./data/knowledgeBase");
 const { createResourceSummaryService } = require("./summarizer");
+const { createKnowledgeCuratorService } = require("./knowledgeCurator");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,6 +24,15 @@ const resourceSummaryService = createResourceSummaryService({
   openaiBaseUrl: OPENAI_BASE_URL,
   openaiModel: process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL
 });
+const knowledgeCuratorService = createKnowledgeCuratorService({
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
+  openaiBaseUrl: OPENAI_BASE_URL,
+  openaiModel: process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL
+});
+const getAllKnowledgeBaseItems = () => [
+  ...knowledgeBaseItems,
+  ...knowledgeCuratorService.getApprovedItems()
+];
 
 app.use(cors());
 app.use(express.json());
@@ -970,7 +980,7 @@ const filterKnowledgeBaseItems = (query = {}) => {
   const product = normalize(query.product);
   const limit = Math.min(parsePositiveInt(query.limit, 20), 50);
 
-  const ranked = knowledgeBaseItems
+  const ranked = getAllKnowledgeBaseItems()
     .filter((item) => {
       if (topic && normalize(item.topic) !== topic) {
         return false;
@@ -998,10 +1008,12 @@ const filterKnowledgeBaseItems = (query = {}) => {
 };
 
 const buildKnowledgeBaseFacets = () => ({
-  products: [...new Set(knowledgeBaseItems.map((item) => item.product))].sort(),
-  topics: [...new Set(knowledgeBaseItems.map((item) => item.topic))].sort(),
-  sourceTypes: [...new Set(knowledgeBaseItems.map((item) => item.sourceType))].sort(),
-  versions: [...new Set(knowledgeBaseItems.map((item) => item.version))].sort()
+  products: [...new Set(getAllKnowledgeBaseItems().map((item) => item.product))].sort(),
+  topics: [...new Set(getAllKnowledgeBaseItems().map((item) => item.topic))].sort(),
+  sourceTypes: [
+    ...new Set(getAllKnowledgeBaseItems().map((item) => item.sourceType))
+  ].sort(),
+  versions: [...new Set(getAllKnowledgeBaseItems().map((item) => item.version))].sort()
 });
 
 const buildYoutubeSearchUrl = (title) => {
@@ -1736,6 +1748,37 @@ app.get("/knowledge/base", (req, res) => {
     items,
     facets: buildKnowledgeBaseFacets()
   });
+});
+
+app.post("/knowledge/curate/analyze", async (req, res) => {
+  try {
+    const payload = await knowledgeCuratorService.analyzeUrl({
+      url: req.body?.url
+    });
+
+    return res.json(payload);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Could not analyze this URL right now."
+    });
+  }
+});
+
+app.post("/knowledge/curate/approve", (req, res) => {
+  try {
+    const item = knowledgeCuratorService.approveDraft({
+      draft: req.body?.draft
+    });
+
+    return res.json({
+      item,
+      totalApproved: knowledgeCuratorService.getApprovedItems().length
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Could not approve this knowledge item right now."
+    });
+  }
 });
 
 app.get("/resolve/topic", (req, res) => {

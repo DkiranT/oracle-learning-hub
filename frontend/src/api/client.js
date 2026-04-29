@@ -76,6 +76,12 @@ export const getKnowledgeBaseItems = (params = {}) =>
 export const getFusionApiPlaybooks = (params = {}) =>
   fetchJson("/knowledge/apis", params);
 
+export const analyzeKnowledgeUrl = (payload = {}) =>
+  postJson("/knowledge/curate/analyze", payload);
+
+export const approveKnowledgeDraft = (payload = {}) =>
+  postJson("/knowledge/curate/approve", payload);
+
 export const summarizeResourceById = (id, payload = {}) =>
   postJson(`/resources/${id}/summary`, payload);
 

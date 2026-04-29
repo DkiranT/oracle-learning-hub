@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
+  CheckCircle2,
   Copy,
   Database,
   Download,
@@ -9,10 +10,13 @@ import {
   Newspaper,
   PlayCircle,
   Search,
+  Sparkles,
   Terminal
 } from "lucide-react";
 import ResourceCard from "../components/ResourceCard";
 import {
+  analyzeKnowledgeUrl,
+  approveKnowledgeDraft,
   getFusionApiPlaybooks,
   getKnowledgeBaseItems,
   getKnowledgeTopics
@@ -35,6 +39,11 @@ const emptyGrouped = {
 const prettyJson = (value) => JSON.stringify(value || {}, null, 2);
 const isBodyMethod = (method) =>
   ["POST", "PUT", "PATCH"].includes((method || "").toUpperCase());
+const linesToArray = (value) =>
+  (value || "")
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
 const parseHeaderLine = (headerLine) => {
   const text = (headerLine || "").toString().trim();
@@ -220,6 +229,14 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
     items: [],
     facets: { products: [], topics: [], sourceTypes: [], versions: [] }
   });
+  const [knowledgeRefreshKey, setKnowledgeRefreshKey] = useState(0);
+  const [curatorUrl, setCuratorUrl] = useState("");
+  const [curatorLoading, setCuratorLoading] = useState(false);
+  const [curatorApproving, setCuratorApproving] = useState(false);
+  const [curatorError, setCuratorError] = useState("");
+  const [curatorDraft, setCuratorDraft] = useState(null);
+  const [curatorSource, setCuratorSource] = useState(null);
+  const [curatorMode, setCuratorMode] = useState("");
 
   const [suiteFilter, setSuiteFilter] = useState("all");
   const [moduleFilter, setModuleFilter] = useState("all");
@@ -338,7 +355,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
     return () => {
       active = false;
     };
-  }, [knowledgeQuery, knowledgeType, knowledgeTopic]);
+  }, [knowledgeQuery, knowledgeType, knowledgeTopic, knowledgeRefreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -517,6 +534,66 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
     });
   };
 
+  const updateCuratorDraft = (field, value) => {
+    setCuratorDraft((current) => ({
+      ...(current || {}),
+      [field]: value
+    }));
+  };
+
+  const handleAnalyzeKnowledgeUrl = async (event) => {
+    event.preventDefault();
+    const url = curatorUrl.trim();
+    if (!url) {
+      setCuratorError("Paste an Oracle doc, blog, YouTube, GitHub, or lab URL first.");
+      return;
+    }
+
+    setCuratorLoading(true);
+    setCuratorError("");
+
+    try {
+      const data = await analyzeKnowledgeUrl({ url });
+      setCuratorDraft(data.draft || null);
+      setCuratorSource(data.sourceContent || null);
+      setCuratorMode(data.mode || "");
+      showToast(
+        data.mode === "openai"
+          ? "AI draft generated from source."
+          : "Draft generated with fallback extraction."
+      );
+    } catch {
+      setCuratorError("Could not analyze this URL. Try another source URL or check backend logs.");
+    } finally {
+      setCuratorLoading(false);
+    }
+  };
+
+  const handleApproveKnowledgeDraft = async () => {
+    if (!curatorDraft) {
+      return;
+    }
+
+    setCuratorApproving(true);
+    setCuratorError("");
+
+    try {
+      const data = await approveKnowledgeDraft({ draft: curatorDraft });
+      const approvedItem = data.item || curatorDraft;
+      setCuratorDraft(null);
+      setCuratorSource(null);
+      setCuratorUrl("");
+      setCuratorMode("");
+      setKnowledgeQuery(approvedItem.title || approvedItem.topic || "");
+      setKnowledgeRefreshKey((current) => current + 1);
+      showToast("Approved and published to Knowledge Base.");
+    } catch {
+      setCuratorError("Could not approve this draft. Please review required fields.");
+    } finally {
+      setCuratorApproving(false);
+    }
+  };
+
   const downloadFilteredCollection = () => {
     const playbookCount = apiPayload.playbooks.length;
     const collection = buildPostmanCollection(
@@ -579,6 +656,229 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
             </p>
           </button>
         </div>
+      </section>
+
+      <section className="overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-slate-50 p-6 shadow-soft md:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white px-3 py-1 text-xs font-semibold text-cyan-700">
+              <Sparkles size={14} />
+              AI-assisted curator
+            </p>
+            <h2 className="font-display text-2xl font-semibold text-slate-900">
+              Import a URL, let AI draft the KB item
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">
+              Paste an Oracle doc, blog, YouTube, GitHub, or lab URL. The backend extracts
+              source text, drafts searchable metadata, and lets you approve it into the
+              Knowledge Base.
+            </p>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+            {curatorMode === "openai"
+              ? "OpenAI draft"
+              : curatorMode
+                ? "Fallback draft"
+                : "Review before publish"}
+          </span>
+        </div>
+
+        <form
+          onSubmit={handleAnalyzeKnowledgeUrl}
+          className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]"
+        >
+          <input
+            value={curatorUrl}
+            onChange={(event) => setCuratorUrl(event.target.value)}
+            placeholder="Paste URL, e.g. Oracle EPM REST docs, OIC blog, YouTube tutorial..."
+            className="rounded-xl border border-cyan-100 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-cyan-400"
+          />
+          <button
+            type="submit"
+            disabled={curatorLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            <Sparkles size={16} />
+            {curatorLoading ? "Analyzing..." : "Analyze with AI"}
+          </button>
+        </form>
+
+        {curatorError && (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            {curatorError}
+          </div>
+        )}
+
+        {curatorDraft && (
+          <div className="mt-5 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-xl font-semibold text-slate-900">
+                    Review AI Draft
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Edit anything if needed, then approve it into the Knowledge Base.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleApproveKnowledgeDraft}
+                  disabled={curatorApproving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                >
+                  <CheckCircle2 size={16} />
+                  {curatorApproving ? "Publishing..." : "Approve & Publish"}
+                </button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500 md:col-span-2">
+                  Title
+                  <input
+                    value={curatorDraft.title || ""}
+                    onChange={(event) => updateCuratorDraft("title", event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Product
+                  <input
+                    value={curatorDraft.product || ""}
+                    onChange={(event) => updateCuratorDraft("product", event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Topic
+                  <input
+                    value={curatorDraft.topic || ""}
+                    onChange={(event) => updateCuratorDraft("topic", event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Source Type
+                  <select
+                    value={curatorDraft.sourceType || "docs"}
+                    onChange={(event) => updateCuratorDraft("sourceType", event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  >
+                    <option value="docs">docs</option>
+                    <option value="videos">videos</option>
+                    <option value="blogs">blogs</option>
+                    <option value="labs">labs</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Difficulty
+                  <select
+                    value={curatorDraft.difficulty || "Intermediate"}
+                    onChange={(event) => updateCuratorDraft("difficulty", event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  >
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500 md:col-span-2">
+                  Summary
+                  <textarea
+                    value={curatorDraft.summary || ""}
+                    onChange={(event) => updateCuratorDraft("summary", event.target.value)}
+                    rows={3}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500 md:col-span-2">
+                  Tags (comma separated)
+                  <input
+                    value={(curatorDraft.tags || []).join(", ")}
+                    onChange={(event) =>
+                      updateCuratorDraft(
+                        "tags",
+                        event.target.value
+                          .split(",")
+                          .map((tag) => tag.trim())
+                          .filter(Boolean)
+                      )
+                    }
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Technical Signals
+                  <textarea
+                    value={(curatorDraft.technicalSignals || []).join("\n")}
+                    onChange={(event) =>
+                      updateCuratorDraft("technicalSignals", linesToArray(event.target.value))
+                    }
+                    rows={5}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Quick Steps
+                  <textarea
+                    value={(curatorDraft.quickSteps || []).join("\n")}
+                    onChange={(event) =>
+                      updateCuratorDraft("quickSteps", linesToArray(event.target.value))
+                    }
+                    rows={5}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm normal-case tracking-normal text-slate-800 outline-none focus:border-slate-400"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+              <div>
+                <h3 className="font-display text-lg font-semibold text-slate-900">
+                  Source Evidence
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  The draft is grounded in the text the backend could fetch from the URL.
+                </p>
+              </div>
+              <div className="space-y-2 text-sm text-slate-700">
+                <p>
+                  <span className="font-semibold">Mode:</span>{" "}
+                  {curatorMode === "openai" ? "OpenAI extraction" : "Fallback extraction"}
+                </p>
+                <p>
+                  <span className="font-semibold">Fetch:</span>{" "}
+                  {curatorSource?.fetchStatus || "unknown"} via{" "}
+                  {curatorSource?.fetchedFrom || "source"}
+                </p>
+                {curatorSource?.insufficientContent && (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
+                    Source text was limited. Please verify important details before approving.
+                  </p>
+                )}
+              </div>
+              {(curatorSource?.groundingSnippets || []).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-slate-800">Fetched snippets</p>
+                  {(curatorSource?.groundingSnippets || []).slice(0, 5).map((snippet) => (
+                    <p key={snippet} className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                      {snippet}
+                    </p>
+                  ))}
+                </div>
+              )}
+              <a
+                href={curatorDraft.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800 hover:text-slate-950"
+              >
+                <Link2 size={14} />
+                Open original source
+              </a>
+            </aside>
+          </div>
+        )}
       </section>
 
       <section className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-soft md:p-8">

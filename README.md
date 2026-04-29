@@ -34,6 +34,7 @@ A full-stack web application to discover curated Oracle learning resources acros
   - Structured step-by-step progression
 - Knowledge Hub:
   - Backend-curated topic bundles for OIC Gen3, REST Adapter, Agentic AI, and Fusion/EPM REST
+  - AI-assisted URL curator that drafts Knowledge Base records from docs, blogs, videos, and labs
   - Dropdown-based Oracle SaaS API payload explorer (suite/module/operation)
   - Ready sample request/response payloads for ERP, Procurement, HCM, SCM, CX, Projects, and EPM APIs
 - Bookmarking:
@@ -113,7 +114,10 @@ VITE_API_BASE_URL=http://localhost:5000
 - `GET /learning-paths`
 - `GET /recommendations`
 - `GET /knowledge/topics`
+- `GET /knowledge/base`
 - `GET /knowledge/apis`
+- `POST /knowledge/curate/analyze`
+- `POST /knowledge/curate/approve`
 - `GET /resolve/topic?q=`
 - `POST /ai/recommend` (OpenAI-backed with fallback recommendations)
 
@@ -139,10 +143,13 @@ VITE_API_BASE_URL=http://localhost:5000
 Knowledge endpoints:
 
 - `GET /knowledge/topics?q=&type=docs|videos|blogs|labs`
+- `GET /knowledge/base?q=&sourceType=docs&topic=REST%20Adapter`
 - `GET /knowledge/apis?suite=ERP&module=AP&operation=Create%20AP%20Invoice&q=payload`
+- `POST /knowledge/curate/analyze` with `{ "url": "https://docs.oracle.com/..." }`
+- `POST /knowledge/curate/approve` with `{ "draft": { ... } }`
 - `GET /resolve/topic?q=oic+gen3&type=docs` (backend-curated URL redirect)
 
-## OpenAI Recommendation Setup (Optional)
+## OpenAI AI Features Setup (Optional)
 
 1. Create `backend/.env` from `backend/.env.example`.
 2. Add your `OPENAI_API_KEY`.
@@ -160,7 +167,7 @@ curl -X POST http://localhost:5000/ai/recommend \
   -d "{\"prompt\":\"I want to learn OCI DevOps for Kubernetes\",\"level\":\"Intermediate\",\"type\":\"videos\"}"
 ```
 
-If OpenAI is unavailable or not configured, the endpoint automatically returns curated fallback recommendations.
+If OpenAI is unavailable or not configured, recommendation, summary, and URL-curation features automatically use local fallback logic.
 
 Resource summary API example:
 
@@ -178,6 +185,8 @@ Mock data is stored in:
 
 - `backend/src/data/resources.js` (26 realistic Oracle resources)
 - `backend/src/data/learningPaths.js` (3 predefined guided paths)
+- `backend/src/data/knowledgeBase.js` (RAG-ready local knowledge index)
+- `backend/src/data/approvedKnowledgeItems.json` (AI-curated approved Knowledge Base items)
 - `backend/src/data/knowledgeHub.js` (manual topic resources)
 - `backend/src/data/fusionApiPlaybooks.js` (Oracle SaaS REST API payload playbooks)
 
@@ -189,7 +198,8 @@ To add your own topic-specific links without changing frontend code:
 2. Add/update entries under:
    - `manualTopicCollections` for topic docs/videos/blogs/labs
 3. Edit `backend/src/data/fusionApiPlaybooks.js` for API endpoints and payload samples
-3. Restart backend (`npm run dev`)
+4. Or use the Knowledge Hub AI-assisted curator to paste a URL, review the draft, and approve it.
+5. Restart backend (`npm run dev`) if you edited backend files manually.
 
 ## Future Enhancements
 
