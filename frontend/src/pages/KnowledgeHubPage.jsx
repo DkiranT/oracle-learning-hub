@@ -7,6 +7,8 @@ import {
   Download,
   FlaskConical,
   Link2,
+  LockKeyhole,
+  LogOut,
   Newspaper,
   PlayCircle,
   Search,
@@ -37,6 +39,7 @@ const emptyGrouped = {
 };
 
 const prettyJson = (value) => JSON.stringify(value || {}, null, 2);
+const ADMIN_SESSION_KEY = "oracleLearningHubAdminKey";
 const isBodyMethod = (method) =>
   ["POST", "PUT", "PATCH"].includes((method || "").toUpperCase());
 const linesToArray = (value) =>
@@ -237,6 +240,15 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
   const [curatorDraft, setCuratorDraft] = useState(null);
   const [curatorSource, setCuratorSource] = useState(null);
   const [curatorMode, setCuratorMode] = useState("");
+  const [adminKey, setAdminKey] = useState(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    return window.sessionStorage.getItem(ADMIN_SESSION_KEY) || "";
+  });
+  const [adminKeyInput, setAdminKeyInput] = useState("");
+  const [adminError, setAdminError] = useState("");
 
   const [suiteFilter, setSuiteFilter] = useState("all");
   const [moduleFilter, setModuleFilter] = useState("all");
@@ -543,6 +555,11 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
 
   const handleAnalyzeKnowledgeUrl = async (event) => {
     event.preventDefault();
+    if (!adminKey) {
+      setAdminError("Enter the admin key to unlock AI curation.");
+      return;
+    }
+
     const url = curatorUrl.trim();
     if (!url) {
       setCuratorError("Paste an Oracle doc, blog, YouTube, GitHub, or lab URL first.");
@@ -553,7 +570,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
     setCuratorError("");
 
     try {
-      const data = await analyzeKnowledgeUrl({ url });
+      const data = await analyzeKnowledgeUrl({ url }, adminKey);
       setCuratorDraft(data.draft || null);
       setCuratorSource(data.sourceContent || null);
       setCuratorMode(data.mode || "");
@@ -562,8 +579,14 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
           ? "AI draft generated from source."
           : "Draft generated with fallback extraction."
       );
-    } catch {
-      setCuratorError("Could not analyze this URL. Try another source URL or check backend logs.");
+    } catch (error) {
+      if (error.message?.includes("401") || error.message?.includes("403")) {
+        setCuratorError("Admin key was not accepted by backend. Check ADMIN_ACCESS_KEY on Render.");
+      } else {
+        setCuratorError(
+          "Could not analyze this URL. Try another source URL or check backend logs."
+        );
+      }
     } finally {
       setCuratorLoading(false);
     }
@@ -578,7 +601,7 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
     setCuratorError("");
 
     try {
-      const data = await approveKnowledgeDraft({ draft: curatorDraft });
+      const data = await approveKnowledgeDraft({ draft: curatorDraft }, adminKey);
       const approvedItem = data.item || curatorDraft;
       setCuratorDraft(null);
       setCuratorSource(null);
@@ -587,11 +610,44 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
       setKnowledgeQuery(approvedItem.title || approvedItem.topic || "");
       setKnowledgeRefreshKey((current) => current + 1);
       showToast("Approved and published to Knowledge Base.");
-    } catch {
-      setCuratorError("Could not approve this draft. Please review required fields.");
+    } catch (error) {
+      if (error.message?.includes("401") || error.message?.includes("403")) {
+        setCuratorError("Admin key was not accepted by backend. Please unlock again.");
+      } else {
+        setCuratorError("Could not approve this draft. Please review required fields.");
+      }
     } finally {
       setCuratorApproving(false);
     }
+  };
+
+  const handleAdminUnlock = (event) => {
+    event.preventDefault();
+    const value = adminKeyInput.trim();
+    if (!value) {
+      setAdminError("Enter the admin key first.");
+      return;
+    }
+
+    setAdminKey(value);
+    setAdminKeyInput("");
+    setAdminError("");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(ADMIN_SESSION_KEY, value);
+    }
+    showToast("Admin curator unlocked for this browser tab.");
+  };
+
+  const handleAdminLock = () => {
+    setAdminKey("");
+    setAdminKeyInput("");
+    setCuratorDraft(null);
+    setCuratorSource(null);
+    setCuratorMode("");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    }
+    showToast("Admin curator locked.");
   };
 
   const downloadFilteredCollection = () => {
@@ -682,6 +738,62 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
                 : "Review before publish"}
           </span>
         </div>
+
+        {!adminKey ? (
+          <form
+            onSubmit={handleAdminUnlock}
+            className="mt-5 rounded-2xl border border-cyan-100 bg-white p-5"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="inline-flex items-center gap-2 font-display text-xl font-semibold text-slate-900">
+                  <LockKeyhole size={18} />
+                  Admin curator locked
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                  Public users can search and read the Knowledge Hub, but only admins with
+                  the private key can import URLs or publish new Knowledge Base entries.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+              <input
+                type="password"
+                value={adminKeyInput}
+                onChange={(event) => setAdminKeyInput(event.target.value)}
+                placeholder="Enter admin key"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-cyan-400"
+              />
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+              >
+                <LockKeyhole size={16} />
+                Unlock Curator
+              </button>
+            </div>
+            {adminError && (
+              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                {adminError}
+              </div>
+            )}
+          </form>
+        ) : (
+          <>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                <CheckCircle2 size={16} />
+                Admin curator unlocked for this browser tab.
+              </p>
+              <button
+                type="button"
+                onClick={handleAdminLock}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 transition hover:border-emerald-300"
+              >
+                <LogOut size={13} />
+                Lock
+              </button>
+            </div>
 
         <form
           onSubmit={handleAnalyzeKnowledgeUrl}
@@ -878,6 +990,8 @@ const KnowledgeHubPage = ({ bookmarkState }) => {
               </a>
             </aside>
           </div>
+        )}
+          </>
         )}
       </section>
 

@@ -156,6 +156,7 @@ Knowledge endpoints:
 3. Optionally set:
    - `OPENAI_MODEL` (default: `gpt-4.1-mini`)
    - `OPENAI_BASE_URL` (default: `https://api.openai.com/v1`)
+   - `ADMIN_ACCESS_KEY` (required to unlock the AI Knowledge Curator on public deployments)
    - `WEB_SEARCH_ENGINE_URL` (default: `https://duckduckgo.com/html/`)
    - `WEB_SEARCH_PER_SOURCE` (default: `5`)
 
@@ -168,6 +169,7 @@ curl -X POST http://localhost:5000/ai/recommend \
 ```
 
 If OpenAI is unavailable or not configured, recommendation, summary, and URL-curation features automatically use local fallback logic.
+The AI Knowledge Curator still requires `ADMIN_ACCESS_KEY`; public users can search/read the hub but cannot import or approve URLs without that key.
 
 Resource summary API example:
 

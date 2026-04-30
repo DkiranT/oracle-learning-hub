@@ -30,11 +30,12 @@ const fetchJson = async (path, params) => {
   return response.json();
 };
 
-const postJson = async (path, payload = {}) => {
+const postJson = async (path, payload = {}, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...(options.headers || {})
     },
     body: JSON.stringify(payload)
   });
@@ -76,11 +77,15 @@ export const getKnowledgeBaseItems = (params = {}) =>
 export const getFusionApiPlaybooks = (params = {}) =>
   fetchJson("/knowledge/apis", params);
 
-export const analyzeKnowledgeUrl = (payload = {}) =>
-  postJson("/knowledge/curate/analyze", payload);
+export const analyzeKnowledgeUrl = (payload = {}, adminKey = "") =>
+  postJson("/knowledge/curate/analyze", payload, {
+    headers: adminKey ? { "X-Admin-Key": adminKey } : {}
+  });
 
-export const approveKnowledgeDraft = (payload = {}) =>
-  postJson("/knowledge/curate/approve", payload);
+export const approveKnowledgeDraft = (payload = {}, adminKey = "") =>
+  postJson("/knowledge/curate/approve", payload, {
+    headers: adminKey ? { "X-Admin-Key": adminKey } : {}
+  });
 
 export const summarizeResourceById = (id, payload = {}) =>
   postJson(`/resources/${id}/summary`, payload);

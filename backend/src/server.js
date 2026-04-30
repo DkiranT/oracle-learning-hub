@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const cheerio = require("cheerio");
@@ -17,6 +18,7 @@ const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const WEB_SEARCH_ENGINE_URL =
   process.env.WEB_SEARCH_ENGINE_URL || "https://duckduckgo.com/html/";
+const ADMIN_ACCESS_KEY = process.env.ADMIN_ACCESS_KEY || "";
 const resourceSummaryService = createResourceSummaryService({
   resources,
   manualTopicCollections,
@@ -38,6 +40,33 @@ app.use(cors());
 app.use(express.json());
 
 const normalize = (value) => (value || "").toString().trim().toLowerCase();
+
+const safeCompare = (left, right) => {
+  const leftValue = Buffer.from((left || "").toString());
+  const rightValue = Buffer.from((right || "").toString());
+
+  return (
+    leftValue.length === rightValue.length &&
+    crypto.timingSafeEqual(leftValue, rightValue)
+  );
+};
+
+const requireAdminAccess = (req, res, next) => {
+  if (!ADMIN_ACCESS_KEY) {
+    return res.status(403).json({
+      message: "Admin curator is locked. Configure ADMIN_ACCESS_KEY on the backend."
+    });
+  }
+
+  const providedKey = req.get("x-admin-key") || "";
+  if (!safeCompare(providedKey, ADMIN_ACCESS_KEY)) {
+    return res.status(401).json({
+      message: "Invalid admin key."
+    });
+  }
+
+  return next();
+};
 
 const parseMultiValueParam = (value) =>
   normalize(value)
@@ -1750,7 +1779,7 @@ app.get("/knowledge/base", (req, res) => {
   });
 });
 
-app.post("/knowledge/curate/analyze", async (req, res) => {
+app.post("/knowledge/curate/analyze", requireAdminAccess, async (req, res) => {
   try {
     const payload = await knowledgeCuratorService.analyzeUrl({
       url: req.body?.url
@@ -1764,7 +1793,7 @@ app.post("/knowledge/curate/analyze", async (req, res) => {
   }
 });
 
-app.post("/knowledge/curate/approve", (req, res) => {
+app.post("/knowledge/curate/approve", requireAdminAccess, (req, res) => {
   try {
     const item = knowledgeCuratorService.approveDraft({
       draft: req.body?.draft
